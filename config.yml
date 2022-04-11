@@ -29,8 +29,8 @@ adam_weight_decay_rate: 1e-5
 adam_bert_weight_decay_rate: 1e-5
 
 seed: 5216
-epochs: 200
-pretrain_epochs: 100
+epochs: 100
+pretrain_epochs: 0
 warmup_rate: 0.2
 early_stop: 30
 train_batch_size: 32

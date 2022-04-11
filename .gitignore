@@ -1,3 +1,9 @@
+data/ACE2005/*.json
+pyrightconfig.json
+tags
+json/
+ckpt/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
