@@ -19,7 +19,7 @@ from inputs.fields.raw_token_field import RawTokenField
 from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.joint_decoder import EntRelJointDecoder
+from models.joint_decoding.new_decoder import EntRelJointDecoder
 from utils.argparse import ConfigurationParer
 from utils.eval import eval_file
 from utils.nn_utils import get_n_trainable_parameters
