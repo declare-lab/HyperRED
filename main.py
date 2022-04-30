@@ -413,5 +413,33 @@ def main():
         train(cfg, ace_dataset, model)
 
 
+"""
+
+python main.py \
+--config_file config.yml \
+--save_dir ckpt/ace2005_bert \
+--data_dir data/ACE2005 \
+--fine_tune \
+--max_sent_len 64 \
+--max_wordpiece_len 64 \
+--epochs 50 \
+--pretrain_epochs 0\
+--device 0
+
+type: PER-SOC                                                                        
+truth cnt: 144 pred cnt: 144 correct cnt: 100                                        
+precision:  69.44%                                                                   
+recall:  69.44%                                                                      
+f1:  69.44%                                                                          
+--------------------------------------------------                                   
+type: GEN-AFF                                                                        
+truth cnt: 100 pred cnt: 65 correct cnt: 46                                          
+precision:  70.77%                                                                   
+recall:  46.00%                                                                      
+f1:  55.76%
+
+"""
+
+
 if __name__ == "__main__":
     main()
