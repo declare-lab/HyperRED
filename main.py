@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import pickle
 import random
 import time
 from collections import defaultdict
@@ -282,6 +283,9 @@ def test(cfg, dataset, model):
     print_predictions_for_joint_decoding(all_outputs, test_output_file, dataset.vocab)
     eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
     eval_file(test_output_file, eval_metrics)
+
+    with open(os.path.join(cfg.save_dir, "pred.pkl"), "wb") as f:
+        pickle.dump(all_outputs, f)
 
 
 def main():
