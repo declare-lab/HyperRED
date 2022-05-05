@@ -430,17 +430,16 @@ python main.py \
 --pretrain_epochs 0\
 --device 0
 
-type: PER-SOC                                                                        
-truth cnt: 144 pred cnt: 144 correct cnt: 100                                        
-precision:  69.44%                                                                   
-recall:  69.44%                                                                      
-f1:  69.44%                                                                          
---------------------------------------------------                                   
-type: GEN-AFF                                                                        
-truth cnt: 100 pred cnt: 65 correct cnt: 46                                          
-precision:  70.77%                                                                   
-recall:  46.00%                                                                      
-f1:  55.76%
+python analysis test_preds 
+
+{
+  "num_correct": 694,
+  "num_pred": 1061,
+  "num_gold": 1228,
+  "precision": 0.6540999057492931,
+  "recall": 0.5651465798045603,
+  "f1": 0.6063783311489733
+}
 
 """
 

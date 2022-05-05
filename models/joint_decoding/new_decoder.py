@@ -50,14 +50,19 @@ class EntRelJointDecoder(nn.Module):
             dropout=cfg.dropout,
         )
 
-        self.U = nn.Parameter(
-            torch.FloatTensor(
-                self.vocab.get_vocab_size("ent_rel_id"),
-                cfg.mlp_hidden_size + 1,
-                cfg.mlp_hidden_size + 1,
-            )
+        self.pair_mlp = BertLinear(
+            input_size=(self.encoder_output_size) * 2,
+            output_size=cfg.mlp_hidden_size,
+            activation=self.activation,
+            dropout=cfg.dropout,
         )
-        self.U.data.zero_()
+
+        self.final_mlp = BertLinear(
+            input_size=cfg.mlp_hidden_size,
+            output_size=self.vocab.get_vocab_size("ent_rel_id"),
+            activation=nn.Identity(),
+            dropout=0.0,
+        )
 
         if cfg.logit_dropout > 0:
             self.logit_dropout = nn.Dropout(p=cfg.logit_dropout)
@@ -99,29 +104,16 @@ class EntRelJointDecoder(nn.Module):
         self.embedding_model(batch_inputs)
         batch_seq_tokens_encoder_repr = batch_inputs["seq_encoder_reprs"]
 
-        batch_seq_tokens_head_repr = self.head_mlp(batch_seq_tokens_encoder_repr)
-        batch_seq_tokens_head_repr = torch.cat(
-            [
-                batch_seq_tokens_head_repr,
-                torch.ones_like(batch_seq_tokens_head_repr[..., :1]),
-            ],
-            dim=-1,
+        batch_size, seq_len, hidden_size = batch_seq_tokens_encoder_repr.shape
+        head = batch_seq_tokens_encoder_repr.unsqueeze(dim=2).expand(
+            -1, -1, seq_len, -1
         )
-        batch_seq_tokens_tail_repr = self.tail_mlp(batch_seq_tokens_encoder_repr)
-        batch_seq_tokens_tail_repr = torch.cat(
-            [
-                batch_seq_tokens_tail_repr,
-                torch.ones_like(batch_seq_tokens_tail_repr[..., :1]),
-            ],
-            dim=-1,
+        tail = batch_seq_tokens_encoder_repr.unsqueeze(dim=1).expand(
+            -1, seq_len, -1, -1
         )
-
-        batch_joint_score = torch.einsum(
-            "bxi, oij, byj -> boxy",
-            batch_seq_tokens_head_repr,
-            self.U,
-            batch_seq_tokens_tail_repr,
-        ).permute(0, 2, 3, 1)
+        pair = torch.cat([head, tail], dim=-1)
+        pair = self.pair_mlp(pair)
+        batch_joint_score = self.final_mlp(pair)
 
         batch_normalized_joint_score = (
             torch.softmax(batch_joint_score, dim=-1)

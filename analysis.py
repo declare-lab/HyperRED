@@ -346,23 +346,5 @@ def test_preds(
     print(json.dumps(results, indent=2))
 
 
-"""
-
-p analysis.py test_preds
-
-How many pairs have empty preds?
-{'num': 22}
-{
-  "num_correct": 663,
-  "num_pred": 1017,
-  "num_gold": 1228,
-  "precision": 0.6519174041297935,
-  "recall": 0.5399022801302932,
-  "f1": 0.5906458797327395
-}
-
-"""
-
-
 if __name__ == "__main__":
     Fire()
