@@ -1,7 +1,7 @@
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import fire
 import numpy as np
@@ -90,6 +90,25 @@ class Qualifier(BaseModel):
     label: str
 
 
+class SparseCube(BaseModel):
+    shape: Tuple[int, int, int]
+    entries: List[Tuple[int, int, int, int]]
+
+    def numpy(self) -> np.ndarray:
+        x = np.zeros(shape=self.shape)
+        for i, j, k, value in self.entries:
+            x[i, j, k] = value
+        return x
+
+    def tolist(self) -> List[List[List[int]]]:
+        x = self.numpy()
+        return [[list(row) for row in table] for table in x]
+
+    def numel(self) -> int:
+        i, j, k = self.shape
+        return i * j * k
+
+
 class Sentence(BaseModel):
     articleId: str
     sentId: int
@@ -101,7 +120,7 @@ class Sentence(BaseModel):
     wordpieceTokensIndex: List[Span]
     wordpieceSegmentIds: List[int]
     jointLabelMatrix: List[List[int]]
-    quintupletMatrix: List[List[List[int]]]
+    quintupletMatrix: Optional[SparseCube] = None
 
 
 def make_sentences(path_in: str, path_out: str):
@@ -154,7 +173,6 @@ def make_sentences(path_in: str, path_out: str):
             wordpieceTokensIndex=[],
             wordpieceSegmentIds=[],
             jointLabelMatrix=[],
-            quintupletMatrix=[],
         )
         sentences.append(sent)
 
@@ -228,11 +246,6 @@ def add_joint_label(sent, ent_rel_id):
     none_id = ent_rel_id["None"]
     seq_len = len(sent["sentText"].split(" "))
     label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
-    quintuplet_matrix = [
-        [[none_id for j in range(seq_len)] for i in range(seq_len)]
-        for k in range(seq_len)
-    ]
-    assert np.array(quintuplet_matrix).shape == (seq_len, seq_len, seq_len)
 
     ent2offset = {}
     for ent in sent["entityMentions"]:
@@ -244,16 +257,20 @@ def add_joint_label(sent, ent_rel_id):
         for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
             for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
                 label_matrix[i][j] = ent_rel_id[rel["label"]]
+
+    entries: List[Tuple[int, int, int, int]] = []
     for rel in sent["qualifierMentions"]:
         for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
             for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
                 for k in range(
                     ent2offset[rel["em3Id"]][0], ent2offset[rel["em3Id"]][1]
                 ):
-                    quintuplet_matrix[i][j][k] = ent_rel_id[rel["label"]]
+                    entries.append((i, j, k, ent_rel_id[rel["label"]]))
 
     sent["jointLabelMatrix"] = label_matrix
-    sent["quintupletMatrix"] = quintuplet_matrix
+    sent["quintupletMatrix"] = SparseCube(
+        shape=(seq_len, seq_len, seq_len), entries=entries
+    ).dict()
 
 
 def process(

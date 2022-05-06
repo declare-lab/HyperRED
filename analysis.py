@@ -349,10 +349,18 @@ def test_preds(
 
 def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     with open(path) as f:
-        for line in f:
-            sent = QuintupletSentence(**json.loads(line))
-            x = np.array(sent.quintupletMatrix)
-            print(x.shape)
+        sents = [QuintupletSentence(**json.loads(line)) for line in tqdm(f)]
+
+    print("\nWhat fraction of the cubes are empty?")
+    total = 0
+    filled = 0
+    for s in sents:
+        assert s.quintupletMatrix is not None
+        total += s.quintupletMatrix.numel()
+        filled += len(s.quintupletMatrix.entries)
+    print(1 - (filled / total))
+
+    # 0.9999643274013658
 
 
 if __name__ == "__main__":
