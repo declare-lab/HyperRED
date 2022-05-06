@@ -441,6 +441,11 @@ python analysis test_preds
   "f1": 0.6063783311489733
 }
 
+Other experiments:
+- Change BertLinear x2 to Sequential(linear, relu, dropout, linear) -> f1 0.57
+- Add head/tail mlp (768 -> 150 dim) before pairing -> f1 0.56
+- Add position embeddings -> ?
+
 """
 
 
