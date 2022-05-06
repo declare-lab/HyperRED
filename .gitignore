@@ -1,3 +1,4 @@
+temp/
 data/ACE2005/*.json
 data/quintuplet/*.json
 pyrightconfig.json

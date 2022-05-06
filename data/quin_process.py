@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import fire
+import numpy as np
 from pydantic import BaseModel
 from tqdm import tqdm
-from transformers import AutoTokenizer
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 Span = Tuple[int, int]
 
@@ -208,6 +209,7 @@ def add_cross_sentence(sentences, tokenizer, max_length=200):
             "sentText": sent["sentText"],
             "entityMentions": sent["entityMentions"],
             "relationMentions": sent["relationMentions"],
+            "qualifierMentions": sent["qualifierMentions"],
             "wordpieceSentText": " ".join(wordpiece_tokens),
             "wordpieceTokensIndex": wordpiece_tokens_index,
             "wordpieceSegmentIds": wordpiece_segment_ids,
@@ -216,6 +218,7 @@ def add_cross_sentence(sentences, tokenizer, max_length=200):
 
         cur_pos += sent_len
 
+    assert len(new_sents) == len(sentences)
     return new_sents
 
 
@@ -223,10 +226,14 @@ def add_joint_label(sent, ent_rel_id):
     """add_joint_label add joint labels for sentences"""
 
     none_id = ent_rel_id["None"]
-    sentence_length = len(sent["sentText"].split(" "))
-    label_matrix = [
-        [none_id for j in range(sentence_length)] for i in range(sentence_length)
+    seq_len = len(sent["sentText"].split(" "))
+    label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
+    quintuplet_matrix = [
+        [[none_id for j in range(seq_len)] for i in range(seq_len)]
+        for k in range(seq_len)
     ]
+    assert np.array(quintuplet_matrix).shape == (seq_len, seq_len, seq_len)
+
     ent2offset = {}
     for ent in sent["entityMentions"]:
         ent2offset[ent["emId"]] = ent["offset"]
@@ -237,10 +244,25 @@ def add_joint_label(sent, ent_rel_id):
         for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
             for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
                 label_matrix[i][j] = ent_rel_id[rel["label"]]
+    for rel in sent["qualifierMentions"]:
+        for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
+            for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
+                for k in range(
+                    ent2offset[rel["em3Id"]][0], ent2offset[rel["em3Id"]][1]
+                ):
+                    quintuplet_matrix[i][j][k] = ent_rel_id[rel["label"]]
+
     sent["jointLabelMatrix"] = label_matrix
+    sent["quintupletMatrix"] = quintuplet_matrix
 
 
-def process(source_file, ent_rel_file, target_file, pretrained_model, max_length=200):
+def process(
+    source_file,
+    target_file,
+    ent_rel_file: str = "data/quintuplet/ent_rel_file.json",
+    pretrained_model: str = "bert-base-uncased",
+    max_length: int = 200,
+):
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     print("Load {} tokenizer successfully.".format(pretrained_model))
 
@@ -250,7 +272,7 @@ def process(source_file, ent_rel_file, target_file, pretrained_model, max_length
         target_file, "w", encoding="utf-8"
     ) as fout:
         sentences = []
-        for line in fin:
+        for line in tqdm(fin.readlines()):
             sent = json.loads(line.strip())
 
             if len(sentences) == 0 or sentences[0]["articleId"] == sent["articleId"]:
@@ -270,9 +292,14 @@ def process(source_file, ent_rel_file, target_file, pretrained_model, max_length
 
 """
 p data/quin_process.py make_label_file
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/train.json data/quintuplet/train.json
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json data/quintuplet/dev.json
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/test.json data/quintuplet/test.json
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/test.json temp/test.json
+
+p data/quin_process.py process temp/train.json data/quintuplet/train.json
+p data/quin_process.py process temp/dev.json data/quintuplet/dev.json
+p data/quin_process.py process temp/test.json data/quintuplet/test.json
+
 """
 
 

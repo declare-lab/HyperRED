@@ -11,6 +11,7 @@ from pydantic.main import Extra
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
+from data.quin_process import Sentence as QuintupletSentence
 from inputs.vocabulary import Vocabulary
 
 
@@ -344,6 +345,14 @@ def test_preds(
     scorer = StrictScorer()
     results = scorer.run(preds, sents)
     print(json.dumps(results, indent=2))
+
+
+def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
+    with open(path) as f:
+        for line in f:
+            sent = QuintupletSentence(**json.loads(line))
+            x = np.array(sent.quintupletMatrix)
+            print(x.shape)
 
 
 if __name__ == "__main__":
