@@ -1,20 +1,27 @@
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Counter, List, Tuple
+from typing import Dict, List, Tuple
 
 import fire
 from pydantic import BaseModel
+from tqdm import tqdm
 from transformers import AutoTokenizer
+
+Span = Tuple[int, int]
 
 
 class FlatQuintuplet(BaseModel):
     tokens: List[str]
-    head: Tuple[int, int]
-    tail: Tuple[int, int]
-    value: Tuple[int, int]
+    head: Span
+    tail: Span
+    value: Span
     relation: str
     qualifier: str
+
+    @property
+    def text(self) -> str:
+        return " ".join(self.tokens)
 
 
 def load_quintuplets(path: str) -> List[FlatQuintuplet]:
@@ -58,6 +65,102 @@ def make_label_file(
     Path(path_out).parent.mkdir(exist_ok=True, parents=True)
     with open(path_out, "w") as f:
         f.write(json.dumps(info, indent=2))
+
+
+class Entity(BaseModel):
+    emId: str
+    text: str
+    offset: Span  # Token spans, start inclusive, end exclusive
+    label: str
+
+
+class Relation(BaseModel):
+    em1Id: str
+    em1Text: str
+    em2Id: str
+    em2Text: str
+    label: str
+
+
+class Qualifier(BaseModel):
+    em1Id: str
+    em2Id: str
+    em3Id: str
+    label: str
+
+
+class Sentence(BaseModel):
+    articleId: str
+    sentId: int
+    sentText: str
+    entityMentions: List[Entity]
+    relationMentions: List[Relation]
+    qualifierMentions: List[Qualifier]
+    wordpieceSentText: str
+    wordpieceTokensIndex: List[Span]
+    wordpieceSegmentIds: List[int]
+    jointLabelMatrix: List[List[int]]
+    quintupletMatrix: List[List[List[int]]]
+
+
+def make_sentences(path_in: str, path_out: str):
+    quintuplets = load_quintuplets(path_in)
+    groups: Dict[str, List[FlatQuintuplet]] = {}
+    for q in quintuplets:
+        groups.setdefault(q.text, []).append(q)
+
+    sentences: List[Sentence] = []
+    for lst in tqdm(list(groups.values())):
+        span_to_entity: Dict[Span, Entity] = {}
+        pair_to_relation: Dict[Tuple[Span, Span], Relation] = {}
+        triplet_to_qualifier: Dict[Tuple[Span, Span, Span], Qualifier] = {}
+
+        for q in lst:
+            for span in [q.head, q.tail, q.value]:
+                ent = Entity(
+                    offset=span,
+                    emId=str(span),
+                    text=" ".join(q.tokens[span[0] : span[1]]),
+                    label="Entity",
+                )
+                span_to_entity[span] = ent
+
+        for q in lst:
+            head = span_to_entity[q.head]
+            tail = span_to_entity[q.tail]
+            value = span_to_entity[q.value]
+            relation = Relation(
+                em1Id=head.emId,
+                em1Text=head.text,
+                em2Id=tail.emId,
+                em2Text=tail.text,
+                label=q.relation,
+            )
+            qualifier = Qualifier(
+                em1Id=head.emId, em2Id=tail.emId, em3Id=value.emId, label=q.qualifier
+            )
+            pair_to_relation[(head.offset, tail.offset)] = relation
+            triplet_to_qualifier[(head.offset, tail.offset, value.offset)] = qualifier
+
+        sent = Sentence(
+            articleId=lst[0].text,
+            sentId=0,
+            sentText=lst[0].text,
+            entityMentions=list(span_to_entity.values()),
+            relationMentions=list(pair_to_relation.values()),
+            qualifierMentions=list(triplet_to_qualifier.values()),
+            wordpieceSentText="",
+            wordpieceTokensIndex=[],
+            wordpieceSegmentIds=[],
+            jointLabelMatrix=[],
+            quintupletMatrix=[],
+        )
+        sentences.append(sent)
+
+    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
+    with open(path_out, "w") as f:
+        for sent in tqdm(sentences):
+            f.write(sent.json() + "\n")
 
 
 def add_cross_sentence(sentences, tokenizer, max_length=200):
@@ -163,6 +266,14 @@ def process(source_file, ent_rel_file, target_file, pretrained_model, max_length
         for new_sent in add_cross_sentence(sentences, auto_tokenizer, max_length):
             add_joint_label(new_sent, ent_rel_id)
             print(json.dumps(new_sent), file=fout)
+
+
+"""
+p data/quin_process.py make_label_file
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/train.json data/quintuplet/train.json
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json data/quintuplet/dev.json
+p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/test.json data/quintuplet/test.json
+"""
 
 
 if __name__ == "__main__":
