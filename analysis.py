@@ -11,7 +11,7 @@ from pydantic.main import Extra
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.quin_process import Sentence as QuintupletSentence
+from data.q_process import Sentence as QuintupletSentence
 from inputs.vocabulary import Vocabulary
 
 

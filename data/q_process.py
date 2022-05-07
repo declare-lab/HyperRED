@@ -271,14 +271,14 @@ def process(
 
 
 """
-p data/quin_process.py make_label_file
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
-p data/quin_process.py make_sentences ../quintuplet/outputs/data/flat/test.json temp/test.json
+p data/q_process.py make_label_file
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/test.json temp/test.json
 
-p data/quin_process.py process temp/train.json data/quintuplet/train.json
-p data/quin_process.py process temp/dev.json data/quintuplet/dev.json
-p data/quin_process.py process temp/test.json data/quintuplet/test.json
+p data/q_process.py process temp/train.json data/quintuplet/train.json
+p data/q_process.py process temp/dev.json data/quintuplet/dev.json
+p data/q_process.py process temp/test.json data/quintuplet/test.json
 
 """
 
