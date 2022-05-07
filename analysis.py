@@ -351,16 +351,92 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     with open(path) as f:
         sents = [QuintupletSentence(**json.loads(line)) for line in tqdm(f)]
 
-    print("\nWhat fraction of the cubes are empty?")
+    print("\nWhat fraction of the cubes (quintuplets) are empty?")
     total = 0
     filled = 0
+    sizes = []
+    counts = []
     for s in sents:
         assert s.quintupletMatrix is not None
         total += s.quintupletMatrix.numel()
+        sizes.append(s.quintupletMatrix.numel())
         filled += len(s.quintupletMatrix.entries)
+        counts.append(len(s.quintupletMatrix.entries))
+    print(dict(frac=1 - (filled / total), sizes=np.mean(sizes), counts=np.mean(counts)))
+
+    print("\nWhat fraction of the tables (relations) are empty?")
+    total = 0
+    filled = 0
+    for s in sents:
+        table = np.array(s.jointLabelMatrix)
+        total += table.size
+        filled += np.sum(table > 0)
     print(1 - (filled / total))
 
-    # 0.9999643274013658
+    print("\nWhat fraction of the diagonals (entities) are empty?")
+    total = 0
+    filled = 0
+    for s in sents:
+        row = list(np.diagonal(np.array(s.jointLabelMatrix)))
+        total += len(row)
+        filled += sum(row)
+    print(1 - (filled / total))
+
+    print("\nWhat is the average sentence length?")
+    lengths = [len(s.sentText.split()) for s in sents]
+    print(sum(lengths) / len(lengths))
+
+    print("\nWhat is the average cube length?")
+    lengths = [s.quintupletMatrix.shape[0] for s in sents]
+    print(sum(lengths) / len(lengths))
+
+    print("\nWhat is the average number of entity tokens in a sentence?")
+    lengths = []
+    for s in sents:
+        tags = [0 for _ in s.sentText.split()]
+        for e in s.entityMentions:
+            for i in range(e.offset[0], e.offset[1]):
+                tags[i] = 1
+        lengths.append(sum(tags))
+        assert list(np.diagonal(np.array(s.jointLabelMatrix))) == tags
+    print(sum(lengths) / len(lengths))
+
+    print("\nWhat is average entity length?")
+    lengths = []
+    for s in sents:
+        for e in s.entityMentions:
+            start, end = e.offset
+            assert end > start
+            lengths.append(end - start)
+    print(dict(lengths=np.mean(lengths)))
+
+    print("\nHow many quintuplets per sent on average?")
+    lengths = [len(s.qualifierMentions) for s in sents]
+    print(dict(lengths=np.mean(lengths)))
+
+    print("\nManually analyze cube")
+    sizes = []
+    counts = []
+    for s in sents:
+        seq_len = len(s.sentText.split())
+        cube = np.zeros(shape=(seq_len, seq_len, seq_len))
+        id_to_span = {e.emId: e.offset for e in s.entityMentions}
+        for q in s.qualifierMentions:
+            head = id_to_span[q.em1Id]
+            tail = id_to_span[q.em2Id]
+            value = id_to_span[q.em3Id]
+            assert len(set([head, tail, value])) == 3
+            for i in range(*head):
+                for j in range(*tail):
+                    for k in range(*value):
+                        cube[i, j, k] = 1
+        sizes.append(cube.size)
+        counts.append(cube.sum())
+    print(
+        dict(
+            frac=sum(counts) / sum(sizes), sizes=np.mean(sizes), counts=np.mean(counts)
+        )
+    )
 
 
 if __name__ == "__main__":
