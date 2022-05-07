@@ -1,7 +1,7 @@
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import fire
 import numpy as np
@@ -108,6 +108,10 @@ class SparseCube(BaseModel):
         i, j, k = self.shape
         return i * j * k
 
+    @classmethod
+    def empty(cls):
+        return cls(shape=(0, 0, 0), entries=[])
+
 
 class Sentence(BaseModel):
     articleId: str
@@ -120,7 +124,7 @@ class Sentence(BaseModel):
     wordpieceTokensIndex: List[Span]
     wordpieceSegmentIds: List[int]
     jointLabelMatrix: List[List[int]]
-    quintupletMatrix: Optional[SparseCube] = None
+    quintupletMatrix: SparseCube
 
 
 def make_sentences(path_in: str, path_out: str):
@@ -173,6 +177,7 @@ def make_sentences(path_in: str, path_out: str):
             wordpieceTokensIndex=[],
             wordpieceSegmentIds=[],
             jointLabelMatrix=[],
+            quintupletMatrix=SparseCube.empty(),
         )
         sentences.append(sent)
 
@@ -182,62 +187,33 @@ def make_sentences(path_in: str, path_out: str):
             f.write(sent.json() + "\n")
 
 
-def add_cross_sentence(sentences, tokenizer, max_length=200):
-    """add_cross_sentence add cross sentences with adding equal number of
-    left and right context tokens.
-    """
+def add_tokens(sent, tokenizer):
+    cls = tokenizer.cls_token
+    sep = tokenizer.sep_token
+    wordpiece_tokens = [cls]
+    wordpiece_tokens.append(sep)
 
-    new_sents = []
-    sent_lens = []
-    last_id = sentences[0]["sentId"] - 1
-    article_id = sentences[0]["articleId"]
+    context_len = len(wordpiece_tokens)
+    wordpiece_segment_ids = [0] * context_len
 
-    for s in sentences:
-        assert s["articleId"] == article_id
-        assert s["sentId"] > last_id
-        last_id = s["sentId"]
-        tokens = s["sentText"].split(" ")
-        sent_lens.append(len(tokens))
+    wordpiece_tokens_index = []
+    cur_index = len(wordpiece_tokens)
+    for token in sent["sentText"].split(" "):
+        tokenized_token = list(tokenizer.tokenize(token))
+        wordpiece_tokens.extend(tokenized_token)
+        wordpiece_tokens_index.append([cur_index, cur_index + len(tokenized_token)])
+        cur_index += len(tokenized_token)
+    wordpiece_tokens.append(sep)
+    wordpiece_segment_ids += [1] * (len(wordpiece_tokens) - context_len)
 
-    cur_pos = 0
-    for sent, sent_len in zip(sentences, sent_lens):
-        cls = tokenizer.cls_token
-        sep = tokenizer.sep_token
-
-        wordpiece_tokens = [cls]
-        wordpiece_tokens.append(sep)
-
-        context_len = len(wordpiece_tokens)
-        wordpiece_segment_ids = [0] * context_len
-
-        wordpiece_tokens_index = []
-        cur_index = len(wordpiece_tokens)
-        for token in sent["sentText"].split(" "):
-            tokenized_token = list(tokenizer.tokenize(token))
-            wordpiece_tokens.extend(tokenized_token)
-            wordpiece_tokens_index.append([cur_index, cur_index + len(tokenized_token)])
-            cur_index += len(tokenized_token)
-        wordpiece_tokens.append(sep)
-
-        wordpiece_segment_ids += [1] * (len(wordpiece_tokens) - context_len)
-
-        new_sent = {
-            "articleId": sent["articleId"],
-            "sentId": sent["sentId"],
-            "sentText": sent["sentText"],
-            "entityMentions": sent["entityMentions"],
-            "relationMentions": sent["relationMentions"],
-            "qualifierMentions": sent["qualifierMentions"],
+    sent.update(
+        {
             "wordpieceSentText": " ".join(wordpiece_tokens),
             "wordpieceTokensIndex": wordpiece_tokens_index,
             "wordpieceSegmentIds": wordpiece_segment_ids,
         }
-        new_sents.append(new_sent)
-
-        cur_pos += sent_len
-
-    assert len(new_sents) == len(sentences)
-    return new_sents
+    )
+    return sent
 
 
 def add_joint_label(sent, ent_rel_id):
@@ -271,6 +247,7 @@ def add_joint_label(sent, ent_rel_id):
     sent["quintupletMatrix"] = SparseCube(
         shape=(seq_len, seq_len, seq_len), entries=entries
     ).dict()
+    return sent
 
 
 def process(
@@ -278,33 +255,19 @@ def process(
     target_file,
     ent_rel_file: str = "data/quintuplet/ent_rel_file.json",
     pretrained_model: str = "bert-base-uncased",
-    max_length: int = 200,
 ):
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     print("Load {} tokenizer successfully.".format(pretrained_model))
 
-    ent_rel_id = json.load(open(ent_rel_file, "r", encoding="utf-8"))["id"]
+    with open(ent_rel_file) as f:
+        ids = json.load(f)["id"]
 
-    with open(source_file, "r", encoding="utf-8") as fin, open(
-        target_file, "w", encoding="utf-8"
-    ) as fout:
-        sentences = []
+    with open(source_file) as fin, open(target_file, "w") as fout:
         for line in tqdm(fin.readlines()):
             sent = json.loads(line.strip())
-
-            if len(sentences) == 0 or sentences[0]["articleId"] == sent["articleId"]:
-                sentences.append(sent)
-            else:
-                for new_sent in add_cross_sentence(
-                    sentences, auto_tokenizer, max_length
-                ):
-                    add_joint_label(new_sent, ent_rel_id)
-                    print(json.dumps(new_sent), file=fout)
-                sentences = [sent]
-
-        for new_sent in add_cross_sentence(sentences, auto_tokenizer, max_length):
-            add_joint_label(new_sent, ent_rel_id)
-            print(json.dumps(new_sent), file=fout)
+            sent = add_tokens(sent, auto_tokenizer)
+            sent = add_joint_label(sent, ids)
+            print(json.dumps(sent), file=fout)
 
 
 """
