@@ -4,7 +4,8 @@ data/quintuplet/*.json
 pyrightconfig.json
 tags
 json/
-ckpt/
+nyt/
+ckpt*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
