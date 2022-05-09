@@ -178,9 +178,10 @@ def add_tokens(sent, tokenizer):
     return sent
 
 
-def add_joint_label(sent, ent_rel_id):
+def add_joint_label(sent, label_vocab):
     """add_joint_label add joint labels for sentences"""
 
+    ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["None"]
     seq_len = len(sent["sentText"].split(" "))
     label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
@@ -197,13 +198,11 @@ def add_joint_label(sent, ent_rel_id):
                 label_matrix[i][j] = ent_rel_id[rel["label"]]
 
     entries: List[Tuple[int, int, int, int]] = []
-    for rel in sent["qualifierMentions"]:
-        for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
-            for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
-                for k in range(
-                    ent2offset[rel["em3Id"]][0], ent2offset[rel["em3Id"]][1]
-                ):
-                    entries.append((i, j, k, ent_rel_id[rel["label"]]))
+    for q in sent["qualifierMentions"]:
+        for i in range(ent2offset[q["em1Id"]][0], ent2offset[q["em1Id"]][1]):
+            for j in range(ent2offset[q["em2Id"]][0], ent2offset[q["em2Id"]][1]):
+                for k in range(ent2offset[q["em3Id"]][0], ent2offset[q["em3Id"]][1]):
+                    entries.append((i, j, k, label_vocab["qualifier"][q["label"]]))
 
     sent["jointLabelMatrix"] = label_matrix
     sent["quintupletMatrix"] = SparseCube(
@@ -213,22 +212,22 @@ def add_joint_label(sent, ent_rel_id):
 
 
 def process(
-    source_file,
-    target_file,
-    ent_rel_file: str = "data/quintuplet/ent_rel_file.json",
+    source_file: str,
+    target_file: str,
+    label_file: str = "data/quintuplet/label_vocab.json",
     pretrained_model: str = "bert-base-uncased",
 ):
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     print("Load {} tokenizer successfully.".format(pretrained_model))
 
-    with open(ent_rel_file) as f:
-        ids = json.load(f)["id"]
+    with open(label_file) as f:
+        label_vocab = json.load(f)
 
     with open(source_file) as fin, open(target_file, "w") as fout:
         for line in tqdm(fin.readlines()):
             sent = json.loads(line.strip())
             sent = add_tokens(sent, auto_tokenizer)
-            sent = add_joint_label(sent, ids)
+            sent = add_joint_label(sent, label_vocab)
             print(json.dumps(sent), file=fout)
 
 
@@ -276,12 +275,11 @@ def apply_top_qualifiers(
             f.write(s.json() + "\n")
 
 
-def make_label_file(
-    path_in: str,
-    path_out: str,
-):
-    with open(path_in) as f:
-        sents = [Sentence(**json.loads(line)) for line in f]
+def make_label_file(pattern_in: str, path_out: str):
+    sents = []
+    for path in sorted(Path().glob(pattern_in)):
+        with open(path) as f:
+            sents.extend([Sentence(**json.loads(line)) for line in tqdm(f)])
 
     relations = [r.label for s in sents for r in s.relationMentions]
     qualifiers = [q.label for s in sents for q in s.qualifierMentions]
@@ -289,6 +287,7 @@ def make_label_file(
     labels.extend(sorted(set(relations)))
     label_map = {name: i for i, name in enumerate(labels)}
     qualifier_map = {name: i for i, name in enumerate(sorted(set(qualifiers)))}
+    print(dict(relations=len(set(relations)), qualifiers=len(qualifier_map)))
 
     info = dict(
         id=label_map,
@@ -310,7 +309,7 @@ p data/q_process.py select_top_qualifiers "temp/*.json" temp/labels.txt --top_k 
 p data/q_process.py apply_top_qualifiers temp/train.json temp/train.json temp/labels.txt
 p data/q_process.py apply_top_qualifiers temp/dev.json temp/dev.json temp/labels.txt
 p data/q_process.py apply_top_qualifiers temp/test.json temp/test.json temp/labels.txt
-p data/q_process.py make_label_file temp/test.json data/quintuplet/label_vocab.json
+p data/q_process.py make_label_file "temp/*.json" data/quintuplet/label_vocab.json
 
 p data/q_process.py process temp/train.json data/quintuplet/train.json
 p data/q_process.py process temp/dev.json data/quintuplet/dev.json
