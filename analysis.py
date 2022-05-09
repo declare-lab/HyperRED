@@ -1,6 +1,7 @@
 import json
 import pickle
 import random
+from collections import Counter
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -437,6 +438,31 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
             frac=sum(counts) / sum(sizes), sizes=np.mean(sizes), counts=np.mean(counts)
         )
     )
+
+    print("\nWhat fraction of sentences have overlapping entities?")
+    selected = []
+    seen = set()
+    for s in sents:
+        tags = [0 for _ in s.sentText.split()]
+        for e in s.entityMentions:
+            for i in range(e.offset[0], e.offset[1]):
+                if tags[i] == 1 and s.sentText not in seen:
+                    seen.add(s.sentText)
+                    selected.append(s)
+                else:
+                    tags[i] = 1
+    print(dict(frac=len(selected) / len(sents)))
+
+    print("\nIf restrict to top-50 qualifiers, how many quintuplets are affected?")
+    top_k = 50
+    qualifiers = []
+    for s in sents:
+        for q in s.qualifierMentions:
+            qualifiers.append(q.label)
+    counter = Counter(qualifiers)
+    threshold = sorted(counter.values())[-top_k]
+    remainder = sum(v for v in counter.values() if v >= threshold)
+    print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
 
 
 if __name__ == "__main__":

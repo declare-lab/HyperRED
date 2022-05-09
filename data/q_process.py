@@ -30,44 +30,6 @@ def load_quintuplets(path: str) -> List[FlatQuintuplet]:
         return [FlatQuintuplet(**json.loads(line)) for line in f]
 
 
-def make_label_file(
-    data_pattern: str = "../quintuplet/outputs/data/flat/*.json",
-    path_out: str = "data/quintuplet/ent_rel_file.json",
-):
-    paths = sorted(Path().glob(data_pattern))
-    quintuplets = [q for p in paths for q in load_quintuplets(str(p))]
-    relations = [q.relation for q in quintuplets]
-    qualifiers = [q.qualifier for q in quintuplets]
-    labels = ["None", "Entity"]
-    labels.extend(sorted(set(relations + qualifiers)))
-    label_map = {name: i for i, name in enumerate(labels)}
-
-    entity_ids = [label_map["Entity"]]
-    relation_ids = sorted(set(label_map[name] for name in relations))
-    qualifier_ids = sorted(set(label_map[name] for name in qualifiers))
-
-    num_none = 0
-    num_entity = len(quintuplets) * 3  # Three entities per quintuplet
-    counter = Counter(relations + qualifiers)
-    counts = [num_none, num_entity] + [
-        counter[name] for name in sorted(set(relations + qualifiers))
-    ]
-
-    assert len(counts) == len(label_map.keys())
-    info = dict(
-        id=label_map,
-        entity=entity_ids,
-        relation=relation_ids,
-        qualifier=qualifier_ids,
-        symmetric=[],
-        asymmetric=sorted(set(relation_ids + qualifier_ids)),
-        count=counts,
-    )
-    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
-    with open(path_out, "w") as f:
-        f.write(json.dumps(info, indent=2))
-
-
 class Entity(BaseModel):
     emId: str
     text: str
@@ -270,11 +232,85 @@ def process(
             print(json.dumps(sent), file=fout)
 
 
+def select_top_qualifiers(path_pattern: str, path_out: str, top_k: int):
+    # Find the most common
+    labels = []
+    for path in sorted(Path().glob(path_pattern)):
+        with open(path) as f:
+            for line in f:
+                sent = Sentence(**json.loads(line))
+                for q in sent.qualifierMentions:
+                    labels.append(q.label)
+
+    counter = Counter(labels)
+    keep = [k for k, v in counter.most_common(top_k)]
+    remainder = sum(counter[k] for k in keep)
+    info = dict(
+        orig_labels=len(set(labels)), q_total=len(labels), q_unchanged=remainder
+    )
+    print(info)
+
+    with open(path_out, "w") as f:
+        f.write("\n".join(keep))
+
+
+def apply_top_qualifiers(
+    path_in: str, path_out: str, path_labels: str, dummy_label: str = "others"
+):
+    with open(path_labels) as f:
+        labels = set(f.read().split("\n"))
+        print(dict(labels=len(labels)))
+
+    sents = []
+    with open(path_in) as f:
+        for line in tqdm(f):
+            s = Sentence(**json.loads(line))
+            for q in s.qualifierMentions:
+                if q.label not in labels:
+                    q.label = dummy_label
+            sents.append(s)
+
+    print(dict(new=len(set(q.label for s in sents for q in s.qualifierMentions))))
+    with open(path_out, "w") as f:
+        for s in tqdm(sents):
+            f.write(s.json() + "\n")
+
+
+def make_label_file(
+    path_in: str,
+    path_out: str,
+):
+    with open(path_in) as f:
+        sents = [Sentence(**json.loads(line)) for line in f]
+
+    relations = [r.label for s in sents for r in s.relationMentions]
+    qualifiers = [q.label for s in sents for q in s.qualifierMentions]
+    labels = ["None", "Entity"]
+    labels.extend(sorted(set(relations)))
+    label_map = {name: i for i, name in enumerate(labels)}
+    qualifier_map = {name: i for i, name in enumerate(sorted(set(qualifiers)))}
+
+    info = dict(
+        id=label_map,
+        entity=[label_map["Entity"]],
+        relation=sorted(set(label_map[name] for name in relations)),
+        qualifier=qualifier_map,
+    )
+    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
+    with open(path_out, "w") as f:
+        f.write(json.dumps(info, indent=2))
+
+
 """
-p data/q_process.py make_label_file
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/test.json temp/test.json
+
+p data/q_process.py select_top_qualifiers "temp/*.json" temp/labels.txt --top_k 50
+p data/q_process.py apply_top_qualifiers temp/train.json temp/train.json temp/labels.txt
+p data/q_process.py apply_top_qualifiers temp/dev.json temp/dev.json temp/labels.txt
+p data/q_process.py apply_top_qualifiers temp/test.json temp/test.json temp/labels.txt
+p data/q_process.py make_label_file temp/test.json data/quintuplet/label_vocab.json
 
 p data/q_process.py process temp/train.json data/quintuplet/train.json
 p data/q_process.py process temp/dev.json data/quintuplet/dev.json
