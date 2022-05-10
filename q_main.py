@@ -2,6 +2,7 @@ import json
 import logging
 import random
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -19,13 +20,13 @@ from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
-from utils.argparse import ConfigurationParer
+from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
 
 logger = logging.getLogger(__name__)
 
 
-def step(cfg, model, batch_inputs, device):
+def prepare_inputs(batch_inputs, device):
     batch_inputs["tokens"] = torch.LongTensor(batch_inputs["tokens"])
     batch_inputs["joint_label_matrix"] = torch.LongTensor(
         batch_inputs["joint_label_matrix"]
@@ -75,7 +76,7 @@ def step(cfg, model, batch_inputs, device):
             "wordpiece_segment_ids"
         ].cuda(device=device, non_blocking=True)
 
-    return model(batch_inputs)
+    return batch_inputs
 
 
 def train(cfg, dataset, model):
@@ -178,7 +179,7 @@ def train(cfg, dataset, model):
 
         model.train()
         batch["epoch"] = epoch - 1
-        outputs = step(cfg, model, batch, cfg.device)
+        outputs = model(prepare_inputs(batch, cfg.device))
         loss = outputs["loss"]
         for k, v in outputs.items():
             if "loss" in k:
@@ -206,7 +207,7 @@ def dev(cfg, dataset, model, data_split: str = "dev"):
     for _, batch in dataset.get_batch(data_split, cfg.test_batch_size, None):
         model.eval()
         with torch.no_grad():
-            outputs = step(cfg, model, batch, cfg.device)
+            outputs = model(prepare_inputs(batch, cfg.device))
             losses.append(outputs["loss"].cpu().item())
 
     return np.mean(losses)
@@ -325,12 +326,33 @@ def main():
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
-    train(cfg, ace_dataset, model)
+    if not Path(cfg.best_model_path).exists():
+        train(cfg, ace_dataset, model)
+    raw_predict(cfg, ace_dataset, model)
+
+
+def raw_predict(cfg, dataset, model, data_split: str = "test"):
+    print(dict(load=cfg.best_model_path))
+    model.load_state_dict(torch.load(cfg.best_model_path))
+    model.eval()
+    outputs = []
+
+    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    for _, batch in tqdm(
+        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
+    ):
+        with torch.no_grad():
+            batch = prepare_inputs(batch, cfg.device)
+            for raw in model.raw_predict(batch):
+                outputs.append(raw)
+
+    path = Path(cfg.save_dir) / f"pred_{data_split}_raw.npy"
+    np.save(path, outputs)
 
 
 """
 
-p q_main.py \
+python q_main.py \
 --ent_rel_file label_vocab.json \
 --train_batch_size 16 \
 --gradient_accumulation_steps 2 \

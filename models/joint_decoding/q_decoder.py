@@ -1,4 +1,5 @@
 import logging
+from typing import List
 
 import numpy as np
 import torch
@@ -7,6 +8,7 @@ from models.embedding_models.bert_embedding_model import BertEmbedModel
 from models.embedding_models.pretrained_embedding_model import \
     PretrainedEmbedModel
 from modules.token_embedders.bert_encoder import BertLinear
+from torch.functional import Tensor
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +139,12 @@ class EntRelJointDecoder(nn.Module):
         results["q_score"] = q_score
         return results
 
-    def soft_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
+    def soft_joint_decoding(
+        self,
+        batch_normalized_joint_score: Tensor,
+        batch_seq_tokens_lens: List[int],
+        batch_q_score,
+    ) -> dict:
         """soft_joint_decoding extracts entity and relation at the same time,
         and consider the interconnection of entity and relation.
 
@@ -152,15 +159,21 @@ class EntRelJointDecoder(nn.Module):
         separate_position_preds = []
         ent_preds = []
         rel_preds = []
+        q_preds = []
 
-        batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
+        joint_array: np.ndarray = batch_normalized_joint_score.cpu().numpy()
+        q_array: np.ndarray = batch_q_score.cpu().numpy()
+        assert joint_array.shape[:3] == q_array.shape[:3]
+        q_label = self.q_label.cpu().numpy()
         ent_label = self.ent_label.cpu().numpy()
         rel_label = self.rel_label.cpu().numpy()
 
         for idx, seq_len in enumerate(batch_seq_tokens_lens):
             ent_pred = {}
             rel_pred = {}
-            joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
+            q_pred = {}
+            joint_score = joint_array[idx][:seq_len, :seq_len, :]
+            q_score = q_array[idx][:seq_len, :seq_len, :seq_len, :]
             joint_score_feature = joint_score.reshape(seq_len, -1)
             transposed_joint_score_feature = joint_score.transpose((1, 0, 2)).reshape(
                 seq_len, -1
@@ -217,7 +230,58 @@ class EntRelJointDecoder(nn.Module):
                         pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
                         rel_pred[(ent1, ent2)] = pred_label
 
+            for ent1 in ents:
+                for ent2 in ents:
+                    for ent3 in ents:
+                        if len(set([ent1, ent2, ent3])) < 3:
+                            continue
+
+                        score = np.mean(
+                            q_score[
+                                ent1[0] : ent1[1],
+                                ent2[0] : ent2[1],
+                                ent3[0] : ent3[1],
+                                :,
+                            ],
+                            axis=(0, 1, 2),
+                        )
+                        if not (np.max(score[q_label]) < score[self.none_idx]):
+                            pred = q_label[np.argmax(score[q_label])].item()
+                            pred_label = self.vocab.get_token_from_index(
+                                pred, "ent_rel_id"
+                            )
+                            q_pred[(ent1, ent2, ent3)] = pred_label
+
             ent_preds.append(ent_pred)
             rel_preds.append(rel_pred)
+            q_preds.append(q_pred)
 
-        return separate_position_preds, ent_preds, rel_preds
+        return dict(
+            separate_position_preds=separate_position_preds,
+            ent_preds=ent_preds,
+            rel_preds=rel_preds,
+            q_preds=q_preds,
+        )
+
+    def raw_predict(self, batch_inputs: dict) -> List[dict]:
+        results = self(batch_inputs)
+        batch_joint_score = (
+            torch.softmax(results["joint_score"], dim=-1)
+            * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
+        )
+        batch_q_score = (
+            torch.softmax(results["q_score"], dim=-1)
+            * batch_inputs["quintuplet_matrix_mask"].unsqueeze(-1).float()
+        )
+
+        outputs = []
+        for i, seq_len in enumerate(batch_inputs["tokens_lens"]):
+            joint_score = batch_joint_score[i, :seq_len, :seq_len, :].cpu().numpy()
+            q_score = batch_q_score[i, :seq_len, :seq_len, :seq_len, :].cpu().numpy()
+            indices = batch_inputs["tokens"][i].cpu().numpy()
+            tokens = [self.vocab.get_token_from_index(i, "tokens") for i in indices]
+            tokens = [t for t in tokens if t != self.vocab.DEFAULT_PAD_TOKEN]
+            text = " ".join(tokens)
+            outputs.append(dict(q_score=q_score, joint_score=joint_score, text=text))
+
+        return outputs
