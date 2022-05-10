@@ -6,6 +6,7 @@ from collections import defaultdict
 import numpy as np
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
@@ -139,6 +140,7 @@ def train(cfg, dataset, model):
         * cfg.epochs
     )
     num_warmup_steps = int(cfg.warmup_rate * total_train_steps) + 1
+    num_batches = cfg.epochs * dataset.get_dataset_size("train") // cfg.train_batch_size
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=num_warmup_steps,
@@ -146,49 +148,42 @@ def train(cfg, dataset, model):
     )
     assert scheduler is not None
 
-    last_epoch = 1
-    batch_id = 0
     best_loss = 1e9
     accumulation_steps = 0
     model.zero_grad()
     seen_epochs = set()
+    epoch_info = dict(epoch=0)
 
-    for epoch, batch in dataset.get_batch("train", cfg.train_batch_size, None):
+    for epoch, batch in tqdm(
+        dataset.get_batch("train", cfg.train_batch_size, None), total=num_batches
+    ):
+        if epoch > cfg.epochs:
+            break
 
-        if last_epoch != epoch or (
-            batch_id != 0 and batch_id % cfg.validate_every == 0
-        ):
+        if epoch not in seen_epochs:
+            seen_epochs.add(epoch)
             if accumulation_steps != 0:
                 optimizer.step()
                 scheduler.step()
                 model.zero_grad()
 
-            if epoch > cfg.pretrain_epochs:
-                dev_loss = dev(cfg, dataset, model)
-                logger.info(str(dict(dev_loss=dev_loss, best_loss=best_loss)))
-                if dev_loss < best_loss:
-                    best_loss = dev_loss
-                    logger.info("Save model...")
-                    torch.save(model.state_dict(), cfg.best_model_path)
+            dev_loss = dev(cfg, dataset, model)
+            epoch_info.update(dev_loss=dev_loss, best_loss=best_loss)
+            if dev_loss < best_loss:
+                best_loss = dev_loss
+                logger.info("Save model...")
+                torch.save(model.state_dict(), cfg.best_model_path)
 
-        if epoch > cfg.epochs:
-            torch.save(model.state_dict(), cfg.last_model_path)
-            break
-
-        if last_epoch != epoch:
-            batch_id = 0
-            last_epoch = epoch
+            logger.info(str(epoch_info))
 
         model.train()
-        batch_id += len(batch["tokens_lens"])
         batch["epoch"] = epoch - 1
         outputs = step(cfg, model, batch, cfg.device)
         loss = outputs["loss"]
-        if epoch not in seen_epochs:
-            seen_epochs.add(epoch)
-            info = {k: v.cpu().item() for k, v in outputs.items() if "loss" in k}
-            info = dict(epoch=epoch, batch_id=batch_id, **info)
-            logger.info(str(info))
+        for k, v in outputs.items():
+            if "loss" in k:
+                epoch_info[k] = round(v.cpu().item(), 4)
+        epoch_info.update(epoch=epoch)
 
         if cfg.gradient_accumulation_steps > 1:
             loss /= cfg.gradient_accumulation_steps
@@ -203,11 +198,6 @@ def train(cfg, dataset, model):
             optimizer.step()
             scheduler.step()
             model.zero_grad()
-
-    state_dict = torch.load(
-        open(cfg.best_model_path, "rb"), map_location=lambda storage, loc: storage
-    )
-    model.load_state_dict(state_dict)
 
 
 def dev(cfg, dataset, model, data_split: str = "dev"):
