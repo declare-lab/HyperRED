@@ -1,30 +1,25 @@
 import json
 import logging
-import os
-import pickle
 import random
-import time
 from collections import defaultdict
 
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import (AdamW, AutoTokenizer, BertTokenizer,
-                          get_linear_schedule_with_warmup)
+from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.models.bert.tokenization_bert import BertTokenizer
+from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from inputs.dataset_readers.ace_reader_for_joint_decoding import \
-    ACEReaderForJointDecoding
-from inputs.datasets.dataset import Dataset
+from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
+from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField
 from inputs.fields.raw_token_field import RawTokenField
 from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.new_decoder import EntRelJointDecoder
+from models.joint_decoding.q_decoder import EntRelJointDecoder
 from utils.argparse import ConfigurationParer
-from utils.eval import eval_file
 from utils.nn_utils import get_n_trainable_parameters
-from utils.prediction_outputs import print_predictions_for_joint_decoding
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +31,12 @@ def step(cfg, model, batch_inputs, device):
     )
     batch_inputs["joint_label_matrix_mask"] = torch.BoolTensor(
         batch_inputs["joint_label_matrix_mask"]
+    )
+    batch_inputs["quintuplet_matrix"] = torch.LongTensor(
+        batch_inputs["quintuplet_matrix"]
+    )
+    batch_inputs["quintuplet_matrix_mask"] = torch.BoolTensor(
+        batch_inputs["quintuplet_matrix_mask"]
     )
     batch_inputs["wordpiece_tokens"] = torch.LongTensor(
         batch_inputs["wordpiece_tokens"]
@@ -57,6 +58,12 @@ def step(cfg, model, batch_inputs, device):
         batch_inputs["joint_label_matrix_mask"] = batch_inputs[
             "joint_label_matrix_mask"
         ].cuda(device=device, non_blocking=True)
+        batch_inputs["quintuplet_matrix"] = batch_inputs["quintuplet_matrix"].cuda(
+            device=device, non_blocking=True
+        )
+        batch_inputs["quintuplet_matrix_mask"] = batch_inputs[
+            "quintuplet_matrix_mask"
+        ].cuda(device=device, non_blocking=True)
         batch_inputs["wordpiece_tokens"] = batch_inputs["wordpiece_tokens"].cuda(
             device=device, non_blocking=True
         )
@@ -67,33 +74,7 @@ def step(cfg, model, batch_inputs, device):
             "wordpiece_segment_ids"
         ].cuda(device=device, non_blocking=True)
 
-    outputs = model(batch_inputs)
-    batch_outputs = []
-    if not model.training:
-        for sent_idx in range(len(batch_inputs["tokens_lens"])):
-            sent_output = dict()
-            sent_output["tokens"] = batch_inputs["tokens"][sent_idx].cpu().numpy()
-            sent_output["span2ent"] = batch_inputs["span2ent"][sent_idx]
-            sent_output["span2rel"] = batch_inputs["span2rel"][sent_idx]
-            sent_output["seq_len"] = batch_inputs["tokens_lens"][sent_idx]
-            sent_output["joint_label_matrix"] = (
-                batch_inputs["joint_label_matrix"][sent_idx].cpu().numpy()
-            )
-            sent_output["joint_label_preds"] = (
-                outputs["joint_label_preds"][sent_idx].cpu().numpy()
-            )
-            sent_output["separate_positions"] = batch_inputs["separate_positions"][
-                sent_idx
-            ]
-            sent_output["all_separate_position_preds"] = outputs[
-                "all_separate_position_preds"
-            ][sent_idx]
-            sent_output["all_ent_preds"] = outputs["all_ent_preds"][sent_idx]
-            sent_output["all_rel_preds"] = outputs["all_rel_preds"][sent_idx]
-            batch_outputs.append(sent_output)
-        return batch_outputs
-
-    return outputs["element_loss"], None, None
+    return model(batch_inputs)
 
 
 def train(cfg, dataset, model):
@@ -167,8 +148,7 @@ def train(cfg, dataset, model):
 
     last_epoch = 1
     batch_id = 0
-    best_f1 = 0.0
-    early_stop_cnt = 0
+    best_loss = 1e9
     accumulation_steps = 0
     model.zero_grad()
     seen_epochs = set()
@@ -184,22 +164,15 @@ def train(cfg, dataset, model):
                 model.zero_grad()
 
             if epoch > cfg.pretrain_epochs:
-                dev_f1 = dev(cfg, dataset, model)
-                if dev_f1 > best_f1:
-                    early_stop_cnt = 0
-                    best_f1 = dev_f1
+                dev_loss = dev(cfg, dataset, model)
+                logger.info(str(dict(dev_loss=dev_loss, best_loss=best_loss)))
+                if dev_loss < best_loss:
+                    best_loss = dev_loss
                     logger.info("Save model...")
-                    torch.save(model.state_dict(), open(cfg.best_model_path, "wb"))
-                elif last_epoch != epoch:
-                    early_stop_cnt += 1
-                    if early_stop_cnt > cfg.early_stop:
-                        logger.info(
-                            "Early Stop: best F1 score: {:6.2f}%".format(100 * best_f1)
-                        )
-                        break
+                    torch.save(model.state_dict(), cfg.best_model_path)
+
         if epoch > cfg.epochs:
-            torch.save(model.state_dict(), open(cfg.last_model_path, "wb"))
-            logger.info("Training Stop: best F1 score: {:6.2f}%".format(100 * best_f1))
+            torch.save(model.state_dict(), cfg.last_model_path)
             break
 
         if last_epoch != epoch:
@@ -209,15 +182,13 @@ def train(cfg, dataset, model):
         model.train()
         batch_id += len(batch["tokens_lens"])
         batch["epoch"] = epoch - 1
-        element_loss, _, _ = step(cfg, model, batch, cfg.device)
-        loss = element_loss
+        outputs = step(cfg, model, batch, cfg.device)
+        loss = outputs["loss"]
         if epoch not in seen_epochs:
             seen_epochs.add(epoch)
-            logger.info(
-                "Epoch: {} Batch: {} Loss: {} (Element_loss: {})".format(
-                    epoch, batch_id, loss.item(), element_loss.item()
-                )
-            )
+            info = {k: v.cpu().item() for k, v in outputs.items() if "loss" in k}
+            info = dict(epoch=epoch, batch_id=batch_id, **info)
+            logger.info(str(info))
 
         if cfg.gradient_accumulation_steps > 1:
             loss /= cfg.gradient_accumulation_steps
@@ -226,7 +197,7 @@ def train(cfg, dataset, model):
 
         accumulation_steps = (accumulation_steps + 1) % cfg.gradient_accumulation_steps
         if accumulation_steps == 0:
-            nn.utils.clip_grad_norm_(
+            nn.utils.clip_grad.clip_grad_norm_(
                 parameters=model.parameters(), max_norm=cfg.gradient_clipping
             )
             optimizer.step()
@@ -237,55 +208,18 @@ def train(cfg, dataset, model):
         open(cfg.best_model_path, "rb"), map_location=lambda storage, loc: storage
     )
     model.load_state_dict(state_dict)
-    test(cfg, dataset, model)
 
 
-def dev(cfg, dataset, model):
-    logger.info("Validate starting...")
+def dev(cfg, dataset, model, data_split: str = "dev"):
     model.zero_grad()
-
-    all_outputs = []
-    cost_time = 0
-    for _, batch in dataset.get_batch("dev", cfg.test_batch_size, None):
+    losses = []
+    for _, batch in dataset.get_batch(data_split, cfg.test_batch_size, None):
         model.eval()
         with torch.no_grad():
-            cost_time -= time.time()
-            batch_outpus = step(cfg, model, batch, cfg.device)
-            cost_time += time.time()
-        all_outputs.extend(batch_outpus)
-    logger.info(f"Cost time: {cost_time}s")
-    dev_output_file = os.path.join(cfg.save_dir, "dev.output")
-    print_predictions_for_joint_decoding(all_outputs, dev_output_file, dataset.vocab)
-    eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
-    joint_label_score, separate_position_score, ent_score, exact_rel_score = eval_file(
-        dev_output_file, eval_metrics
-    )
-    return ent_score + exact_rel_score
+            outputs = step(cfg, model, batch, cfg.device)
+            losses.append(outputs["loss"].cpu().item())
 
-
-def test(cfg, dataset, model):
-    logger.info("Testing starting...")
-    model.zero_grad()
-
-    all_outputs = []
-
-    cost_time = 0
-    for _, batch in dataset.get_batch("test", cfg.test_batch_size, None):
-        model.eval()
-        with torch.no_grad():
-            cost_time -= time.time()
-            batch_outpus = step(cfg, model, batch, cfg.device)
-            cost_time += time.time()
-        all_outputs.extend(batch_outpus)
-    logger.info(f"Cost time: {cost_time}s")
-
-    test_output_file = os.path.join(cfg.save_dir, "test.output")
-    print_predictions_for_joint_decoding(all_outputs, test_output_file, dataset.vocab)
-    eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
-    eval_file(test_output_file, eval_metrics)
-
-    with open(os.path.join(cfg.save_dir, "pred.pkl"), "wb") as f:
-        pickle.dump(all_outputs, f)
+    return np.mean(losses)
 
 
 def main():
@@ -316,6 +250,8 @@ def main():
     span2ent = MapTokenField("span2ent", "ent_rel_id", "span2ent", False)
     span2rel = MapTokenField("span2rel", "ent_rel_id", "span2rel", False)
     joint_label_matrix = RawTokenField("joint_label_matrix", "joint_label_matrix")
+    quintuplet_shape = RawTokenField("quintuplet_shape", "quintuplet_shape")
+    quintuplet_entries = RawTokenField("quintuplet_entries", "quintuplet_entries")
     wordpiece_tokens = TokenField(
         "wordpiece_tokens", "wordpiece", "wordpiece_tokens", False
     )
@@ -326,6 +262,7 @@ def main():
         "wordpiece_segment_ids", "wordpiece_segment_ids"
     )
     fields = [tokens, separate_positions, span2ent, span2rel, joint_label_matrix]
+    fields.extend([quintuplet_shape, quintuplet_entries])
 
     if cfg.embedding_model in ["bert", "pretrained"]:
         fields.extend([wordpiece_tokens, wordpiece_tokens_index, wordpiece_segment_ids])
@@ -395,56 +332,27 @@ def main():
 
     # joint model
     model = EntRelJointDecoder(cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
-
-    if cfg.test and os.path.exists(cfg.best_model_path):
-        state_dict = torch.load(
-            open(cfg.best_model_path, "rb"), map_location=lambda storage, loc: storage
-        )
-        model.load_state_dict(state_dict)
-        logger.info(
-            "Loading best training model {} successfully for testing.".format(
-                cfg.best_model_path
-            )
-        )
-
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
-    if cfg.test:
-        dev(cfg, ace_dataset, model)
-        test(cfg, ace_dataset, model)
-    else:
-        train(cfg, ace_dataset, model)
+    train(cfg, ace_dataset, model)
 
 
 """
 
-python main.py \
+p q_main.py \
+--ent_rel_file label_vocab.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
 --config_file config.yml \
---save_dir ckpt/ace2005_bert \
---data_dir data/ACE2005 \
+--save_dir ckpt/quintuplet \
+--data_dir data/quintuplet \
 --fine_tune \
---max_sent_len 64 \
---max_wordpiece_len 64 \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
 --epochs 50 \
---pretrain_epochs 0\
+--pretrain_epochs 0 \
 --device 0
-
-python analysis test_preds 
-
-{
-  "num_correct": 694,
-  "num_pred": 1061,
-  "num_gold": 1228,
-  "precision": 0.6540999057492931,
-  "recall": 0.5651465798045603,
-  "f1": 0.6063783311489733
-}
-
-Other experiments:
-- Change BertLinear x2 to Sequential(linear, relu, dropout, linear) -> f1 0.57
-- Add head/tail mlp (768 -> 150 dim) before pairing -> f1 0.56
-- Add position embeddings -> ?
 
 """
 

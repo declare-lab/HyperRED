@@ -21,7 +21,7 @@ class EntRelJointDecoder(nn.Module):
         Args:
             cfg (dict): config parameters for constructing multiple models
             vocab (Vocabulary): vocabulary
-            ent_rel_file (dict): entity and relation file (joint id, entity id, relation id, symmetric id, asymmetric id)
+            ent_rel_file (dict): entity and relation file (joint id, entity id, relation id)
         """
 
         super().__init__()
@@ -64,28 +64,33 @@ class EntRelJointDecoder(nn.Module):
             dropout=0.0,
         )
 
+        self.value_mlp = BertLinear(
+            input_size=self.encoder_output_size,
+            output_size=cfg.mlp_hidden_size,
+            activation=self.activation,
+            dropout=cfg.dropout,
+        )
+
+        self.U = nn.parameter.Parameter(
+            torch.FloatTensor(
+                ent_rel_file["q_num_logits"],
+                cfg.mlp_hidden_size,
+                cfg.mlp_hidden_size,
+            )
+        )
+        self.U.data.zero_()
+
         if cfg.logit_dropout > 0:
             self.logit_dropout = nn.Dropout(p=cfg.logit_dropout)
         else:
             self.logit_dropout = lambda x: x
 
         self.none_idx = self.vocab.get_token_index("None", "ent_rel_id")
-
-        self.symmetric_label = torch.LongTensor(ent_rel_file["symmetric"])
-        self.asymmetric_label = torch.LongTensor(ent_rel_file["asymmetric"])
         self.ent_label = torch.LongTensor(ent_rel_file["entity"])
         self.rel_label = torch.LongTensor(ent_rel_file["relation"])
-        if self.device > -1:
-            self.symmetric_label = self.symmetric_label.cuda(
-                device=self.device, non_blocking=True
-            )
-            self.asymmetric_label = self.asymmetric_label.cuda(
-                device=self.device, non_blocking=True
-            )
-            self.ent_label = self.ent_label.cuda(device=self.device, non_blocking=True)
-            self.rel_label = self.rel_label.cuda(device=self.device, non_blocking=True)
-
+        self.q_label = torch.LongTensor(ent_rel_file["qualifier"])
         self.element_loss = nn.CrossEntropyLoss()
+        self.quintuplet_loss = nn.CrossEntropyLoss()
 
     def forward(self, batch_inputs):
         """forward
@@ -96,10 +101,6 @@ class EntRelJointDecoder(nn.Module):
         Returns:
             dict -- results: ent_loss, ent_pred
         """
-
-        results = {}
-
-        batch_seq_tokens_lens = batch_inputs["tokens_lens"]
 
         self.embedding_model(batch_inputs)
         batch_seq_tokens_encoder_repr = batch_inputs["seq_encoder_reprs"]
@@ -115,33 +116,25 @@ class EntRelJointDecoder(nn.Module):
         pair = self.pair_mlp(pair)
         batch_joint_score = self.final_mlp(pair)
 
-        batch_normalized_joint_score = (
-            torch.softmax(batch_joint_score, dim=-1)
-            * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
+        value = self.value_mlp(batch_seq_tokens_encoder_repr)
+        q_score = torch.einsum("bxyi, oij, bzj -> bxyzo", pair, self.U, value)
+        mask = batch_inputs["quintuplet_matrix_mask"]
+        assert q_score.shape[:-1] == mask.shape
+        q_loss = self.quintuplet_loss(
+            q_score.softmax(-1)[mask], batch_inputs["quintuplet_matrix"][mask]
         )
 
-        if not self.training:
-            results["joint_label_preds"] = torch.argmax(
-                batch_normalized_joint_score, dim=-1
-            )
-
-            separate_position_preds, ent_preds, rel_preds = self.soft_joint_decoding(
-                batch_normalized_joint_score, batch_seq_tokens_lens
-            )
-
-            results["all_separate_position_preds"] = separate_position_preds
-            results["all_ent_preds"] = ent_preds
-            results["all_rel_preds"] = rel_preds
-
-            return results
-
+        results = {}
         results["element_loss"] = self.element_loss(
             self.logit_dropout(
                 batch_joint_score[batch_inputs["joint_label_matrix_mask"]]
             ),
             batch_inputs["joint_label_matrix"][batch_inputs["joint_label_matrix_mask"]],
         )
-
+        results["q_loss"] = q_loss
+        results["loss"] = results["element_loss"] + results["q_loss"]
+        results["joint_score"] = batch_joint_score
+        results["q_score"] = q_score
         return results
 
     def soft_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
@@ -161,7 +154,6 @@ class EntRelJointDecoder(nn.Module):
         rel_preds = []
 
         batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
-        symmetric_label = self.symmetric_label.cpu().numpy()
         ent_label = self.ent_label.cpu().numpy()
         rel_label = self.rel_label.cpu().numpy()
 
@@ -169,11 +161,6 @@ class EntRelJointDecoder(nn.Module):
             ent_pred = {}
             rel_pred = {}
             joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
-            joint_score[..., symmetric_label] = (
-                joint_score[..., symmetric_label]
-                + joint_score[..., symmetric_label].transpose((1, 0, 2))
-            ) / 2
-
             joint_score_feature = joint_score.reshape(seq_len, -1)
             transposed_joint_score_feature = joint_score.transpose((1, 0, 2)).reshape(
                 seq_len, -1
