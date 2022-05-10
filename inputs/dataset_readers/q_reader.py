@@ -180,7 +180,6 @@ class ACEReaderForJointDecoding:
             )
             return False, results
 
-        entity_pos = [0] * sentence_length
         idx2ent = {}
         span2ent = {}
 
@@ -207,18 +206,6 @@ class ACEReaderForJointDecoding:
                 return False, results
 
             span2ent[(st, ed)] = entity["label"]
-
-            j = 0
-            for i in range(st, ed):
-                if entity_pos[i] != 0:
-                    logger.error(
-                        "article id: {} sentence id: {} entity span overlap.".format(
-                            line["articleId"], line["sentId"]
-                        )
-                    )
-                    return False, results
-                entity_pos[i] = 1
-                j += 1
 
         results["separate_positions"] = sorted(separate_positions)
         results["span2ent"] = span2ent
@@ -276,7 +263,8 @@ class ACEReaderForJointDecoding:
             return False, results
 
         results["joint_label_matrix"] = line["jointLabelMatrix"]
-        results["quintuplet_matrix"] = line["quintupletMatrix"]
+        results["quintuplet_shape"] = line["quintupletMatrix"]["shape"]
+        results["quintuplet_entries"] = line["quintupletMatrix"]["entries"]
 
         return True, results
 

@@ -1,5 +1,8 @@
 import logging
 import random
+from typing import Dict, List
+
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +134,23 @@ class Dataset:
                     )
                 )
 
+    def make_quintuplet_batch(
+        self, dataset: Dict[str, list], sorted_ids: List[int]
+    ) -> dict:
+        entries = [dataset["quintuplet_entries"][i] for i in sorted_ids]
+        lengths = [dataset["quintuplet_shape"][i][0] for i in sorted_ids]
+        size = max(lengths)
+        matrix = torch.zeros(len(sorted_ids), size, size, size, dtype=torch.long)
+        mask = torch.zeros_like(matrix)
+
+        for index, lst in enumerate(entries):
+            for i, j, k, value in lst:
+                matrix[index, i, j, k] = value
+            num = lengths[index]
+            mask[index, :num, :num, :num] = 1
+
+        return {"quintuplet_matrix": matrix, "quintuplet_matrix_mask": mask > 0}
+
     def get_batch(self, instance_name, batch_size, sort_namespace=None):
         """get_batch gets batch data and padding
 
@@ -191,7 +211,12 @@ class Dataset:
 
             batch = {}
 
+            q_info = self.make_quintuplet_batch(dataset, sorted_ids)
+            batch.update(**q_info)
             for namespace in dataset:
+                if "quintuplet" in namespace:
+                    continue
+
                 batch[namespace] = []
 
                 if namespace in self.wo_padding_namespace:

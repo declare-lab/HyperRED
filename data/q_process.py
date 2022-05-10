@@ -202,7 +202,7 @@ def add_joint_label(sent, label_vocab):
         for i in range(ent2offset[q["em1Id"]][0], ent2offset[q["em1Id"]][1]):
             for j in range(ent2offset[q["em2Id"]][0], ent2offset[q["em2Id"]][1]):
                 for k in range(ent2offset[q["em3Id"]][0], ent2offset[q["em3Id"]][1]):
-                    entries.append((i, j, k, label_vocab["qualifier"][q["label"]]))
+                    entries.append((i, j, k, ent_rel_id[q["label"]]))
 
     sent["jointLabelMatrix"] = label_matrix
     sent["quintupletMatrix"] = SparseCube(
@@ -281,19 +281,18 @@ def make_label_file(pattern_in: str, path_out: str):
         with open(path) as f:
             sents.extend([Sentence(**json.loads(line)) for line in tqdm(f)])
 
-    relations = [r.label for s in sents for r in s.relationMentions]
-    qualifiers = [q.label for s in sents for q in s.qualifierMentions]
-    labels = ["None", "Entity"]
-    labels.extend(sorted(set(relations)))
+    relations = sorted(set(r.label for s in sents for r in s.relationMentions))
+    qualifiers = sorted(set(q.label for s in sents for q in s.qualifierMentions))
+    labels = ["None", "Entity"] + qualifiers + sorted(set(relations) - set(qualifiers))
     label_map = {name: i for i, name in enumerate(labels)}
-    qualifier_map = {name: i for i, name in enumerate(sorted(set(qualifiers)))}
-    print(dict(relations=len(set(relations)), qualifiers=len(qualifier_map)))
+    print(dict(relations=len(relations), qualifiers=len(qualifiers)))
 
     info = dict(
         id=label_map,
         entity=[label_map["Entity"]],
-        relation=sorted(set(label_map[name] for name in relations)),
-        qualifier=qualifier_map,
+        relation=[label_map[name] for name in relations],
+        qualifier=[label_map[name] for name in qualifiers],
+        q_num_logits=len(qualifiers) + 2,
     )
     Path(path_out).parent.mkdir(exist_ok=True, parents=True)
     with open(path_out, "w") as f:
