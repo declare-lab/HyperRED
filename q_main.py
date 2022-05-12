@@ -172,8 +172,8 @@ def train(cfg, dataset, model):
             epoch_info.update(dev_loss=dev_loss, best_loss=best_loss)
             if dev_loss < best_loss:
                 best_loss = dev_loss
-                logger.info("Save model...")
-                torch.save(model.state_dict(), cfg.best_model_path)
+                logger.info(str(dict(save=cfg.best_model_path)))
+                model.save(cfg.best_model_path)
 
             logger.info(str(epoch_info))
 
@@ -326,28 +326,8 @@ def main():
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
-    if not Path(cfg.best_model_path).exists():
-        train(cfg, ace_dataset, model)
-    raw_predict(cfg, ace_dataset, model)
-
-
-def raw_predict(cfg, dataset, model, data_split: str = "test"):
-    print(dict(load=cfg.best_model_path))
-    model.load_state_dict(torch.load(cfg.best_model_path))
-    model.eval()
-    outputs = []
-
-    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
-    for _, batch in tqdm(
-        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
-    ):
-        with torch.no_grad():
-            batch = prepare_inputs(batch, cfg.device)
-            for raw in model.raw_predict(batch):
-                outputs.append(raw)
-
-    path = Path(cfg.save_dir) / f"pred_{data_split}_raw.npy"
-    np.save(path, outputs)
+    ace_dataset.save(str(Path(cfg.save_dir) / "dataset.pickle"))
+    train(cfg, ace_dataset, model)
 
 
 """
@@ -362,7 +342,7 @@ python q_main.py \
 --fine_tune \
 --max_sent_len 80 \
 --max_wordpiece_len 80 \
---epochs 50 \
+--epochs 30 \
 --pretrain_epochs 0 \
 --device 0
 

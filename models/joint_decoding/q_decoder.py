@@ -27,6 +27,8 @@ class EntRelJointDecoder(nn.Module):
         """
 
         super().__init__()
+        self.cfg = cfg
+        self.ent_rel_file = ent_rel_file
         self.vocab = vocab
         self.max_span_length = cfg.max_span_length
         self.activation = nn.GELU()
@@ -285,3 +287,27 @@ class EntRelJointDecoder(nn.Module):
             outputs.append(dict(q_score=q_score, joint_score=joint_score, text=text))
 
         return outputs
+
+    def save(self, path: str):
+        device = self.device
+        info = dict(
+            state_dict=self.cpu().state_dict(),
+            cfg=self.cfg,
+            vocab=self.vocab,
+            ent_rel_file=self.ent_rel_file,
+        )
+        torch.save(info, path)
+        self.to(device)
+        print(dict(save=path))
+
+    @classmethod
+    def load(cls, path):
+        print(dict(load=path))
+        info = torch.load(path)
+        state_dict = info.pop("state_dict")
+        model = cls(**info)
+        model.load_state_dict(state_dict)
+        if model.cfg.device > -1:
+            model.cuda(device=model.cfg.device)
+            print(dict(cuda=model.cfg.device))
+        return model
