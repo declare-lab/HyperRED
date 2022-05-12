@@ -13,7 +13,10 @@ from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from data.q_process import Sentence as QuintupletSentence
+from inputs.datasets.q_dataset import Dataset
 from inputs.vocabulary import Vocabulary
+from models.joint_decoding.q_decoder import EntRelJointDecoder
+from q_main import prepare_inputs
 
 
 def test_lengths(
@@ -118,7 +121,7 @@ class Relation(BaseModel, extra=Extra.forbid):
     label: str
 
 
-class Sentence(BaseModel, extra=Extra.forbid):
+class Sentence(BaseModel):
     articleId: str
     sentId: int
     sentText: str
@@ -463,6 +466,45 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     threshold = sorted(counter.values())[-top_k]
     remainder = sum(v for v in counter.values() if v >= threshold)
     print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
+
+
+def decode_raw_preds(
+    path_in: str = "ckpt/quintuplet/pred_test_raw.npy",
+    path_out: str = "ckpt/quintuplet/pre_test.json",
+):
+    raw_outputs = np.load(path_in, allow_pickle=True)
+    print(dict(raw_outputs=len(raw_outputs)))
+    breakpoint()
+
+
+def test_load_model(
+    path: str = "ckpt/quintuplet/best_model", path_data="ckpt/quintuplet/dataset.pickle"
+):
+    model = EntRelJointDecoder.load(path)
+    dataset = Dataset.load(path_data)
+    print(model.ent_rel_file)
+    data_split: str = "test"
+    cfg = model.cfg
+    model.eval()
+    outputs = []
+
+    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    for _, batch in tqdm(
+        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
+    ):
+        with torch.no_grad():
+            batch = prepare_inputs(batch, cfg.device)
+            for raw in model.raw_predict(batch):
+                outputs.append(raw)
+
+            for raw in outputs:
+                print(dict(raw=raw.keys()))
+                joint_preds = raw["joint_score"].argmax(axis=-1)
+                for row in joint_preds:
+                    print(row)
+                print()
+
+            breakpoint()
 
 
 if __name__ == "__main__":
