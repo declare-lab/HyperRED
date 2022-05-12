@@ -37,10 +37,14 @@ class Qualifier(BaseModel):
 
 
 class Sentence(BaseModel):
-    sentText: str
+    text: str
     ents: List[Entity]
     relations: List[Relation]
     qualifiers: List[Qualifier]
+
+    @classmethod
+    def empty(cls):
+        return cls(text="", ents=[], relations=[], qualifiers=[])
 
 
 class EntRelJointDecoder(nn.Module):
@@ -257,7 +261,7 @@ class EntRelJointDecoder(nn.Module):
                     qualifiers[(e1, e2, e3)] = q
 
         return Sentence(
-            sentText=text,
+            text=text,
             ents=list(ents.values()),
             relations=list(relations.values()),
             qualifiers=list(qualifiers.values()),

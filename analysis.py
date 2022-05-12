@@ -13,11 +13,8 @@ from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from data.q_process import Sentence as QuintupletSentence
-from inputs.datasets.q_dataset import Dataset
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.q_decoder import EntRelJointDecoder
 from models.joint_decoding.q_decoder import Sentence as PredSentence
-from q_main import prepare_inputs
 
 
 def test_lengths(
@@ -469,36 +466,10 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
 
 
-def test_load_model(
-    path: str = "ckpt/quintuplet/best_model",
-    path_data="ckpt/quintuplet/dataset.pickle",
-    path_out: str = "ckpt/quintuplet/pred_dev.json",
-    data_split: str = "dev",
+def test_q_preds(
+    path: str = "ckpt/quintuplet/pred_dev.json",
+    path_gold: str = "data/quintuplet/dev.json",
 ):
-    model = EntRelJointDecoder.load(path)
-    dataset = Dataset.load(path_data)
-    cfg = model.cfg
-    model.eval()
-    outputs = []
-
-    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
-    sents = []
-    for _, batch in tqdm(
-        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
-    ):
-        with torch.no_grad():
-            batch = prepare_inputs(batch, cfg.device)
-            for raw in model.raw_predict(batch):
-                outputs.append(raw)
-                s = model.decode(**raw)
-                sents.append(s)
-
-    with open(path_out, "w") as f:
-        for s in sents:
-            f.write(s.json() + "\n")
-
-
-def test_q_preds(path: str = "ckpt/quintuplet/pred_dev.json"):
     with open(path) as f:
         sents = [PredSentence(**json.loads(line)) for line in tqdm(f)]
     print(dict(sents=len(sents)))
