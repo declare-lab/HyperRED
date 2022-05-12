@@ -16,6 +16,7 @@ from data.q_process import Sentence as QuintupletSentence
 from inputs.datasets.q_dataset import Dataset
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
+from models.joint_decoding.q_decoder import Sentence as PredSentence
 from q_main import prepare_inputs
 
 
@@ -468,27 +469,20 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
 
 
-def decode_raw_preds(
-    path_in: str = "ckpt/quintuplet/pred_test_raw.npy",
-    path_out: str = "ckpt/quintuplet/pre_test.json",
-):
-    raw_outputs = np.load(path_in, allow_pickle=True)
-    print(dict(raw_outputs=len(raw_outputs)))
-    breakpoint()
-
-
 def test_load_model(
-    path: str = "ckpt/quintuplet/best_model", path_data="ckpt/quintuplet/dataset.pickle"
+    path: str = "ckpt/quintuplet/best_model",
+    path_data="ckpt/quintuplet/dataset.pickle",
+    path_out: str = "ckpt/quintuplet/pred_dev.json",
+    data_split: str = "dev",
 ):
     model = EntRelJointDecoder.load(path)
     dataset = Dataset.load(path_data)
-    print(model.ent_rel_file)
-    data_split: str = "test"
     cfg = model.cfg
     model.eval()
     outputs = []
 
     num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    sents = []
     for _, batch in tqdm(
         dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
     ):
@@ -496,15 +490,29 @@ def test_load_model(
             batch = prepare_inputs(batch, cfg.device)
             for raw in model.raw_predict(batch):
                 outputs.append(raw)
+                s = model.decode(**raw)
+                sents.append(s)
 
-            for raw in outputs:
-                print(dict(raw=raw.keys()))
-                joint_preds = raw["joint_score"].argmax(axis=-1)
-                for row in joint_preds:
-                    print(row)
-                print()
+    with open(path_out, "w") as f:
+        for s in sents:
+            f.write(s.json() + "\n")
 
-            breakpoint()
+
+def test_q_preds(path: str = "ckpt/quintuplet/pred_dev.json"):
+    with open(path) as f:
+        sents = [PredSentence(**json.loads(line)) for line in tqdm(f)]
+    print(dict(sents=len(sents)))
+
+    print("\nWhat are ent/relation/qualifier counts and scores?")
+    for key in ["ents", "relations", "qualifiers"]:
+        counts = [len(s.dict()[key]) for s in sents]
+        scores = [x["score"] for s in sents for x in s.dict()[key]]
+        info = dict(
+            key=key,
+            counts=dict(min=min(counts), max=max(counts), avg=np.mean(counts)),
+            scores=dict(min=min(scores), max=max(scores), avg=np.mean(scores)),
+        )
+        print(json.dumps(info, indent=2))
 
 
 if __name__ == "__main__":
