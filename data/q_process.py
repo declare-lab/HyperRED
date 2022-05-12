@@ -289,6 +289,8 @@ def make_label_file(pattern_in: str, path_out: str):
 
     info = dict(
         id=label_map,
+        symmetric=[],
+        asymmetric=[],
         entity=[label_map["Entity"]],
         relation=[label_map[name] for name in relations],
         qualifier=[label_map[name] for name in qualifiers],

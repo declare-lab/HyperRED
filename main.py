@@ -446,6 +446,35 @@ Other experiments:
 - Add head/tail mlp (768 -> 150 dim) before pairing -> f1 0.56
 - Add position embeddings -> ?
 
+
+Train triplet extraction on quintuplet data
+
+p main.py \
+--ent_rel_file label_vocab.json \
+--config_file config.yml \
+--save_dir ckpt/q_triplet_only \
+--data_dir data/quintuplet \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0\
+--device 0
+
+p analysis.py test_preds \
+--path_pred ckpt/q_triplet_only/pred.pkl \
+--path_gold data/quintuplet/test.json \
+--path_vocab ckpt/q_triplet_only/vocabulary.pickle
+
+{
+  "num_correct": 3631,
+  "num_pred": 5258,
+  "num_gold": 6093,
+  "precision": 0.6905667554203119,
+  "recall": 0.5959297554570819,
+  "f1": 0.6397674213725663
+}
+
 """
 
 
