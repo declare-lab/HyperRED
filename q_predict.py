@@ -36,12 +36,22 @@ p analysis.py test_preds \
 --path_vocab ckpt/quintuplet/vocabulary.pickle
 
 {
-  "num_correct": 3566,
-  "num_pred": 5167,
+  "scorer": "StrictScorer",
+  "num_correct": 3566,                                  
+  "num_pred": 5167,   
   "num_gold": 6203,
   "precision": 0.6901490226437004,
-  "recall": 0.5748831210704498,
-  "f1": 0.6272647317502199
+  "recall": 0.5748831210704498,   
+  "f1": 0.6272647317502199                              
+}
+{
+  "scorer": "QuintupletScorer",
+  "num_correct": 2021,
+  "num_pred": 3341,
+  "num_gold": 6860,
+  "precision": 0.6049087099670757,
+  "recall": 0.2946064139941691,
+  "f1": 0.3962356631702774
 }
 
 p analysis.py test_preds \
@@ -50,12 +60,22 @@ p analysis.py test_preds \
 --path_vocab ckpt/quintuplet/vocabulary.pickle
 
 {
-  "num_correct": 3639,
-  "num_pred": 5199,
+  "scorer": "StrictScorer",
+  "num_correct": 3639,                                  
+  "num_pred": 5199,   
   "num_gold": 6093,
   "precision": 0.6999422965954991,
-  "recall": 0.5972427375677006,
-  "f1": 0.6445270988310309
+  "recall": 0.5972427375677006,  
+  "f1": 0.6445270988310309                              
+}
+{
+  "scorer": "QuintupletScorer",
+  "num_correct": 2000,
+  "num_pred": 3294,
+  "num_gold": 6738,
+  "precision": 0.607164541590771,
+  "recall": 0.2968239833778569,
+  "f1": 0.39872408293460926
 }
 
 """

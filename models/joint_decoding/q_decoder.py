@@ -1,5 +1,4 @@
 import logging
-from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -8,43 +7,8 @@ from models.embedding_models.bert_embedding_model import BertEmbedModel
 from models.embedding_models.pretrained_embedding_model import \
     PretrainedEmbedModel
 from modules.token_embedders.bert_encoder import BertLinear
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-
-Span = Tuple[int, int]
-
-
-class Entity(BaseModel):
-    span: Span  # Token spans, start inclusive, end exclusive
-    label: str
-    score: float = 0.0
-
-
-class Relation(BaseModel):
-    head: Span
-    tail: Span
-    label: str
-    score: float = 0.0
-
-
-class Qualifier(BaseModel):
-    head: Span
-    tail: Span
-    value: Span
-    label: str
-    score: float = 0.0
-
-
-class Sentence(BaseModel):
-    text: str
-    ents: List[Entity]
-    relations: List[Relation]
-    qualifiers: List[Qualifier]
-
-    @classmethod
-    def empty(cls):
-        return cls(text="", ents=[], relations=[], qualifiers=[])
 
 
 class EntRelJointDecoder(nn.Module):
@@ -162,25 +126,29 @@ class EntRelJointDecoder(nn.Module):
             q_score.softmax(-1)[mask], batch_inputs["quintuplet_matrix"][mask]
         )
 
-        batch_normalized_joint_score = (
-            torch.softmax(batch_joint_score, dim=-1)
-            * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
-        )
-
         results = {}
         if not self.training:
+            batch_normalized_joint_score = (
+                torch.softmax(batch_joint_score, dim=-1)
+                * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
+            )
+            batch_normalized_q_score = (
+                torch.softmax(q_score, dim=-1)
+                * batch_inputs["quintuplet_matrix_mask"].unsqueeze(-1).float()
+            )
+
             results["joint_label_preds"] = torch.argmax(
                 batch_normalized_joint_score, dim=-1
             )
+            # results["quintuplet_preds"] = torch.argmax(batch_normalized_q_score, dim=-1)
 
             batch_seq_tokens_lens = batch_inputs["tokens_lens"]
-            separate_position_preds, ent_preds, rel_preds = self.soft_joint_decoding(
-                batch_normalized_joint_score, batch_seq_tokens_lens
+            decode_preds = self.soft_joint_decoding(
+                batch_normalized_joint_score,
+                batch_seq_tokens_lens,
+                batch_normalized_q_score,
             )
-
-            results["all_separate_position_preds"] = separate_position_preds
-            results["all_ent_preds"] = ent_preds
-            results["all_rel_preds"] = rel_preds
+            results.update(decode_preds)
 
         results["element_loss"] = self.element_loss(
             self.logit_dropout(
@@ -194,7 +162,12 @@ class EntRelJointDecoder(nn.Module):
         results["q_score"] = q_score
         return results
 
-    def soft_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
+    def soft_joint_decoding(
+        self,
+        batch_normalized_joint_score,
+        batch_seq_tokens_lens,
+        batch_normalized_q_score,
+    ) -> dict:
         """soft_joint_decoding extracts entity and relation at the same time,
         and consider the interconnection of entity and relation.
 
@@ -209,15 +182,21 @@ class EntRelJointDecoder(nn.Module):
         separate_position_preds = []
         ent_preds = []
         rel_preds = []
+        q_preds = []
 
         batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
+        batch_normalized_q_score = batch_normalized_q_score.cpu().numpy()
         symmetric_label = []
         ent_label = self.ent_label
         rel_label = self.rel_label
+        q_label = self.q_label
 
         for idx, seq_len in enumerate(batch_seq_tokens_lens):
             ent_pred = {}
             rel_pred = {}
+            q_pred = {}
+
+            q_score = batch_normalized_q_score[idx][:seq_len, :seq_len, :seq_len, :]
             joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
             joint_score[..., symmetric_label] = (
                 joint_score[..., symmetric_label]
@@ -280,125 +259,37 @@ class EntRelJointDecoder(nn.Module):
                         pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
                         rel_pred[(ent1, ent2)] = pred_label
 
+            for ent1 in ents:
+                for ent2 in ents:
+                    for ent3 in ents:
+                        if len(set([ent1, ent2, ent3])) < 3:
+                            continue
+                        score = np.mean(
+                            q_score[
+                                ent1[0] : ent1[1],
+                                ent2[0] : ent2[1],
+                                ent3[0] : ent3[1],
+                                :,
+                            ],
+                            axis=(0, 1, 2),
+                        )
+                        if not (np.max(score[q_label]) < score[self.none_idx]):
+                            pred = q_label[np.argmax(score[q_label])].item()
+                            pred_label = self.vocab.get_token_from_index(
+                                pred, "ent_rel_id"
+                            )
+                            q_pred[(ent1, ent2, ent3)] = pred_label
+
             ent_preds.append(ent_pred)
             rel_preds.append(rel_pred)
+            q_preds.append(q_pred)
 
-        return separate_position_preds, ent_preds, rel_preds
-
-    def decode(
-        self, joint_score: np.ndarray, q_score: np.ndarray, text: str
-    ) -> Sentence:
-        assert joint_score.shape[:2] == q_score.shape[:2]
-        ents = {}
-        relations = {}
-        qualifiers = {}
-        seq_len = joint_score.shape[0]
-
-        joint_score_feature = joint_score.reshape(seq_len, -1)
-        transposed_joint_score_feature = joint_score.transpose((1, 0, 2)).reshape(
-            seq_len, -1
+        return dict(
+            all_separate_position_preds=separate_position_preds,
+            all_ent_preds=ent_preds,
+            all_rel_preds=rel_preds,
+            all_q_preds=q_preds,
         )
-        separate_pos = (
-            (
-                np.linalg.norm(
-                    joint_score_feature[0 : seq_len - 1]
-                    - joint_score_feature[1:seq_len],
-                    axis=1,
-                )
-                + np.linalg.norm(
-                    transposed_joint_score_feature[0 : seq_len - 1]
-                    - transposed_joint_score_feature[1:seq_len],
-                    axis=1,
-                )
-            )
-            * 0.5
-            > self.separate_threshold
-        ).nonzero()[0]
-
-        if len(separate_pos) > 0:
-            spans = [
-                (0, separate_pos[0].item() + 1),
-                (separate_pos[-1].item() + 1, seq_len),
-            ] + [
-                (separate_pos[idx].item() + 1, separate_pos[idx + 1].item() + 1)
-                for idx in range(len(separate_pos) - 1)
-            ]
-        else:
-            spans = [(0, seq_len)]
-
-        for start, end in spans:
-            score = np.mean(joint_score[start:end, start:end, :], axis=(0, 1))
-            pred = self.ent_label[np.argmax(score[self.ent_label])]
-            label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-            e = Entity(
-                span=(start, end),
-                label=label,
-                score=np.max(score[self.ent_label]),
-            )
-            ents[e.span] = e
-
-        for e1 in ents.keys():
-            for e2 in ents.keys():
-                score = np.mean(
-                    joint_score[e1[0] : e1[1], e2[0] : e2[1], :], axis=(0, 1)
-                )
-                pred = self.rel_label[np.argmax(score[self.rel_label])]
-                label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                r = Relation(
-                    head=e1,
-                    tail=e2,
-                    label=label,
-                    score=np.max(score[self.rel_label]),
-                )
-                relations[(e1, e2)] = r
-
-        for e1 in ents.keys():
-            for e2 in ents.keys():
-                for e3 in ents.keys():
-                    score = np.mean(
-                        q_score[e1[0] : e1[1], e2[0] : e2[1], e3[0] : e3[1], :],
-                        axis=(0, 1, 2),
-                    )
-                    pred = self.q_label[np.argmax(score[self.q_label])]
-                    label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                    q = Qualifier(
-                        head=e1,
-                        tail=e2,
-                        value=e3,
-                        label=label,
-                        score=np.max(score[self.q_label]),
-                    )
-                    qualifiers[(e1, e2, e3)] = q
-
-        return Sentence(
-            text=text,
-            ents=list(ents.values()),
-            relations=list(relations.values()),
-            qualifiers=list(qualifiers.values()),
-        )
-
-    def raw_predict(self, batch_inputs: dict) -> List[dict]:
-        results = self(batch_inputs)
-        batch_joint_score = (
-            torch.softmax(results["joint_score"], dim=-1)
-            * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
-        )
-        batch_q_score = (
-            torch.softmax(results["q_score"], dim=-1)
-            * batch_inputs["quintuplet_matrix_mask"].unsqueeze(-1).float()
-        )
-
-        outputs = []
-        for i, seq_len in enumerate(batch_inputs["tokens_lens"]):
-            joint_score = batch_joint_score[i, :seq_len, :seq_len, :].cpu().numpy()
-            q_score = batch_q_score[i, :seq_len, :seq_len, :seq_len, :].cpu().numpy()
-            indices = batch_inputs["tokens"][i].cpu().numpy()
-            tokens = [self.vocab.get_token_from_index(i, "tokens") for i in indices]
-            tokens = [t for t in tokens if t != self.vocab.DEFAULT_PAD_TOKEN]
-            text = " ".join(tokens)
-            outputs.append(dict(q_score=q_score, joint_score=joint_score, text=text))
-
-        return outputs
 
     def save(self, path: str):
         device = self.device

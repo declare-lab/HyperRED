@@ -238,6 +238,7 @@ def process_outputs(
         ][sent_idx]
         sent_output["all_ent_preds"] = batch_outputs["all_ent_preds"][sent_idx]
         sent_output["all_rel_preds"] = batch_outputs["all_rel_preds"][sent_idx]
+        sent_output["all_q_preds"] = batch_outputs["all_q_preds"][sent_idx]
         all_outputs.append(sent_output)
     return all_outputs
 
@@ -249,7 +250,10 @@ def evaluate(
     losses = []
     all_outputs = []
 
-    for _, batch in dataset.get_batch(data_split, cfg.test_batch_size, None):
+    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    for _, batch in tqdm(
+        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
+    ):
         model.eval()
         with torch.no_grad():
             inputs = prepare_inputs(batch, cfg.device)

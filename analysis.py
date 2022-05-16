@@ -14,7 +14,6 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from data.q_process import Sentence as QuintupletSentence
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.q_decoder import Sentence as PredSentence
 
 
 def test_lengths(
@@ -119,12 +118,20 @@ class Relation(BaseModel, extra=Extra.forbid):
     label: str
 
 
+class Qualifier(BaseModel, extra=Extra.forbid):
+    em1Id: str
+    em2Id: str
+    em3Id: str
+    label: str
+
+
 class Sentence(BaseModel):
     articleId: str
     sentId: int
     sentText: str
     entityMentions: List[Entity]
     relationMentions: List[Relation]
+    qualifierMentions: List[Qualifier] = []
     wordpieceSentText: str
     wordpieceTokensIndex: List[Tuple[int, int]]
     wordpieceSegmentIds: List[int]
@@ -140,15 +147,6 @@ class Sentence(BaseModel):
                 entity_pos[i] = 1
         return False
 
-    def as_relation_tuples(self) -> List[Tuple[int, int, int, int, str]]:
-        id_to_entity = {e.emId: e for e in self.entityMentions}
-        tuples = []
-        for r in self.relationMentions:
-            head = id_to_entity[r.em1Id].offset
-            tail = id_to_entity[r.em2Id].offset
-            tuples.append((head[0], head[1], tail[0], tail[1], r.label))
-        return tuples
-
 
 class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     tokens: np.ndarray
@@ -161,6 +159,9 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     all_separate_position_preds: List[int]
     all_ent_preds: Dict[Tuple[int, int], str]
     all_rel_preds: Dict[Tuple[Tuple[int, int], Tuple[int, int]], str]
+    all_q_preds: Dict[
+        Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]], str
+    ] = {}
 
     def assert_valid(self):
         assert self.tokens.size > 0
@@ -188,12 +189,6 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     def has_relations(self) -> bool:
         return len(self.all_rel_preds.keys()) > 0
 
-    def as_relation_tuples(self) -> List[Tuple[int, int, int, int, str]]:
-        tuples = []
-        for (head, tail), label in self.all_rel_preds.items():
-            tuples.append((head[0], head[1], tail[0], tail[1], label))
-        return tuples
-
     def as_sentence(self, vocab: Vocabulary) -> Sentence:
         tokens = [vocab.get_token_from_index(i, "tokens") for i in self.tokens]
         tokens = [t for t in tokens if t != vocab.DEFAULT_PAD_TOKEN]
@@ -213,11 +208,22 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
             )
             relations.append(r)
 
+        qualifiers = []
+        for (head, tail, value), label in self.all_q_preds.items():
+            q = Qualifier(
+                em1Id=span_to_ent[head].emId,
+                em2Id=span_to_ent[tail].emId,
+                em3Id=span_to_ent[value].emId,
+                label=label,
+            )
+            qualifiers.append(q)
+
         return Sentence(
             articleId=str((text, relations)),
             sentText=text,
             entityMentions=list(span_to_ent.values()),
             relationMentions=relations,
+            qualifierMentions=qualifiers,
             sentId=0,
             wordpieceSentText="",
             wordpieceTokensIndex=[],
@@ -264,6 +270,12 @@ def match_sent_preds(
     return outputs
 
 
+def safe_divide(a: float, b: float) -> float:
+    if a == 0.0 or b == 0.0:
+        return 0.0
+    return a / b
+
+
 class Scorer:
     def run(self, pred: List[Sentence], gold: List[Sentence]) -> Dict[str, float]:
         raise NotImplementedError
@@ -302,9 +314,10 @@ class StrictScorer:
                     if a == b:
                         num_correct += 1
 
-        precision = num_correct / num_pred
-        recall = num_correct / num_gold
-        f1 = (2 * precision * recall) / (precision + recall)
+        precision = safe_divide(num_correct, num_pred)
+        recall = safe_divide(num_correct, num_gold)
+        f1 = safe_divide(2 * precision * recall, precision + recall)
+
         return dict(
             num_correct=num_correct,
             num_pred=num_pred,
@@ -313,6 +326,34 @@ class StrictScorer:
             recall=recall,
             f1=f1,
         )
+
+
+class QuintupletScorer(StrictScorer):
+    def make_sent_tuples(
+        self, s: Sentence
+    ) -> List[Tuple[int, int, int, int, int, int, str, str]]:
+        id_to_entity = {e.emId: e for e in s.entityMentions}
+        pair_to_relation = {(r.em1Id, r.em2Id): r.label for r in s.relationMentions}
+
+        tuples = []
+        for q in s.qualifierMentions:
+            head = id_to_entity[q.em1Id]
+            tail = id_to_entity[q.em2Id]
+            value = id_to_entity[q.em3Id]
+            relation = pair_to_relation.get((q.em1Id, q.em2Id))
+            if relation is not None:
+                t = (
+                    head.offset[0],
+                    head.offset[1],
+                    tail.offset[0],
+                    tail.offset[1],
+                    value.offset[0],
+                    value.offset[1],
+                    relation,
+                    q.label,
+                )
+                tuples.append(t)
+        return tuples
 
 
 def test_preds(
@@ -344,9 +385,10 @@ def test_preds(
         sents = [Sentence(**json.loads(line)) for line in f]
 
     preds = match_sent_preds(sents, raw_preds, vocab)
-    scorer = StrictScorer()
-    results = scorer.run(preds, sents)
-    print(json.dumps(results, indent=2))
+    for scorer in [StrictScorer(), QuintupletScorer()]:
+        results = scorer.run(preds, sents)
+        results = dict(scorer=type(scorer).__name__, **results)
+        print(json.dumps(results, indent=2))
 
 
 def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
@@ -464,40 +506,6 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     threshold = sorted(counter.values())[-top_k]
     remainder = sum(v for v in counter.values() if v >= threshold)
     print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
-
-
-def test_q_preds(
-    path: str = "ckpt/quintuplet/pred_dev.json",
-    path_gold: str = "data/quintuplet/dev.json",
-):
-    with open(path) as f:
-        sents = [PredSentence(**json.loads(line)) for line in tqdm(f)]
-    print(dict(sents=len(sents)))
-
-    print("\nWhat are ent/relation/qualifier counts and scores?")
-    for key in ["ents", "relations", "qualifiers"]:
-        counts = [len(getattr(s, key)) for s in sents]
-        scores = [getattr(x, "score") for s in sents for x in getattr(s, key)]
-        info = dict(
-            key=key,
-            counts=dict(min=min(counts), max=max(counts), avg=np.mean(counts)),
-            scores=dict(min=min(scores), max=max(scores), avg=np.mean(scores)),
-        )
-        print(json.dumps(info, indent=2))
-
-    print("\nWhat are the predicted qualifier labels?")
-    print(Counter(q.label for s in sents for q in s.qualifiers))
-
-    random.seed(0)
-    for _ in range(10):
-        i = random.randint(0, len(sents))
-        s = sents[i]
-        q = sorted(s.qualifiers, key=lambda q: q.score)[-1]
-        tokens = s.text.split()
-        head = " ".join(tokens[q.head[0] : q.head[1]])
-        tail = " ".join(tokens[q.tail[0] : q.tail[1]])
-        value = " ".join(tokens[q.value[0] : q.value[1]])
-        print((head, tail, value, q.label))
 
 
 if __name__ == "__main__":
