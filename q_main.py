@@ -1,12 +1,16 @@
 import json
 import logging
+import pickle
 import random
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.functional import Tensor
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
@@ -20,8 +24,10 @@ from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
+from utils.eval import eval_file
 from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
+from utils.prediction_outputs import print_predictions_for_joint_decoding
 
 logger = logging.getLogger(__name__)
 
@@ -150,15 +156,17 @@ def train(cfg, dataset, model):
     assert scheduler is not None
 
     best_loss = 1e9
+    best_score = -1e9
     accumulation_steps = 0
     model.zero_grad()
     seen_epochs = set()
-    epoch_info = dict(epoch=0)
+    epoch_info = dict(epoch=0.0)
 
     for epoch, batch in tqdm(
         dataset.get_batch("train", cfg.train_batch_size, None), total=num_batches
     ):
         if epoch > cfg.epochs:
+            model.save(cfg.last_model_path)
             break
 
         if epoch not in seen_epochs:
@@ -168,10 +176,17 @@ def train(cfg, dataset, model):
                 scheduler.step()
                 model.zero_grad()
 
-            dev_loss = dev(cfg, dataset, model)
-            epoch_info.update(dev_loss=dev_loss, best_loss=best_loss)
+            dev_loss, dev_score = evaluate(cfg, dataset, model, data_split="dev")
+            epoch_info.update(
+                dev_loss=dev_loss,
+                best_loss=best_loss,
+                score=dev_score,
+                best_score=best_score,
+            )
             if dev_loss < best_loss:
                 best_loss = dev_loss
+            if dev_score > best_score:
+                best_score = dev_score
                 logger.info(str(dict(save=cfg.best_model_path)))
                 model.save(cfg.best_model_path)
 
@@ -201,16 +216,60 @@ def train(cfg, dataset, model):
             model.zero_grad()
 
 
-def dev(cfg, dataset, model, data_split: str = "dev"):
+def process_outputs(
+    batch_inputs: Dict[str, Tensor], batch_outputs: Dict[str, Tensor]
+) -> List[dict]:
+    all_outputs = []
+    for sent_idx in range(len(batch_inputs["tokens_lens"])):
+        sent_output = dict()
+        sent_output["tokens"] = batch_inputs["tokens"][sent_idx].cpu().numpy()
+        sent_output["span2ent"] = batch_inputs["span2ent"][sent_idx]
+        sent_output["span2rel"] = batch_inputs["span2rel"][sent_idx]
+        sent_output["seq_len"] = batch_inputs["tokens_lens"][sent_idx]
+        sent_output["joint_label_matrix"] = (
+            batch_inputs["joint_label_matrix"][sent_idx].cpu().numpy()
+        )
+        sent_output["joint_label_preds"] = (
+            batch_outputs["joint_label_preds"][sent_idx].cpu().numpy()
+        )
+        sent_output["separate_positions"] = batch_inputs["separate_positions"][sent_idx]
+        sent_output["all_separate_position_preds"] = batch_outputs[
+            "all_separate_position_preds"
+        ][sent_idx]
+        sent_output["all_ent_preds"] = batch_outputs["all_ent_preds"][sent_idx]
+        sent_output["all_rel_preds"] = batch_outputs["all_rel_preds"][sent_idx]
+        all_outputs.append(sent_output)
+    return all_outputs
+
+
+def evaluate(
+    cfg: Namespace, dataset: Dataset, model: EntRelJointDecoder, data_split: str
+):
     model.zero_grad()
     losses = []
+    all_outputs = []
+
     for _, batch in dataset.get_batch(data_split, cfg.test_batch_size, None):
         model.eval()
         with torch.no_grad():
-            outputs = model(prepare_inputs(batch, cfg.device))
+            inputs = prepare_inputs(batch, cfg.device)
+            outputs = model(inputs)
             losses.append(outputs["loss"].cpu().item())
+            all_outputs.extend(process_outputs(inputs, outputs))
 
-    return np.mean(losses)
+    output_file = str(Path(cfg.save_dir) / f"{data_split}.output")
+    print_predictions_for_joint_decoding(all_outputs, output_file, dataset.vocab)
+    eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
+    joint_label_score, separate_position_score, ent_score, exact_rel_score = eval_file(
+        output_file, eval_metrics
+    )
+    score = ent_score + exact_rel_score
+    path = Path(cfg.save_dir) / f"raw_{data_split}.pkl"
+    print(dict(path=path))
+    with open(path, "wb") as f:
+        pickle.dump(all_outputs, f)
+
+    return np.mean(losses), score
 
 
 def main():

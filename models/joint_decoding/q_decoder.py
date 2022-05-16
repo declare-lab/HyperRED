@@ -162,7 +162,26 @@ class EntRelJointDecoder(nn.Module):
             q_score.softmax(-1)[mask], batch_inputs["quintuplet_matrix"][mask]
         )
 
+        batch_normalized_joint_score = (
+            torch.softmax(batch_joint_score, dim=-1)
+            * batch_inputs["joint_label_matrix_mask"].unsqueeze(-1).float()
+        )
+
         results = {}
+        if not self.training:
+            results["joint_label_preds"] = torch.argmax(
+                batch_normalized_joint_score, dim=-1
+            )
+
+            batch_seq_tokens_lens = batch_inputs["tokens_lens"]
+            separate_position_preds, ent_preds, rel_preds = self.soft_joint_decoding(
+                batch_normalized_joint_score, batch_seq_tokens_lens
+            )
+
+            results["all_separate_position_preds"] = separate_position_preds
+            results["all_ent_preds"] = ent_preds
+            results["all_rel_preds"] = rel_preds
+
         results["element_loss"] = self.element_loss(
             self.logit_dropout(
                 batch_joint_score[batch_inputs["joint_label_matrix_mask"]]
@@ -174,6 +193,97 @@ class EntRelJointDecoder(nn.Module):
         results["joint_score"] = batch_joint_score
         results["q_score"] = q_score
         return results
+
+    def soft_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
+        """soft_joint_decoding extracts entity and relation at the same time,
+        and consider the interconnection of entity and relation.
+
+        Args:
+            batch_normalized_joint_score (tensor): batch normalized joint score
+            batch_seq_tokens_lens (list): batch sequence length
+
+        Returns:
+            tuple: predicted entity and relation
+        """
+
+        separate_position_preds = []
+        ent_preds = []
+        rel_preds = []
+
+        batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
+        symmetric_label = []
+        ent_label = self.ent_label
+        rel_label = self.rel_label
+
+        for idx, seq_len in enumerate(batch_seq_tokens_lens):
+            ent_pred = {}
+            rel_pred = {}
+            joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
+            joint_score[..., symmetric_label] = (
+                joint_score[..., symmetric_label]
+                + joint_score[..., symmetric_label].transpose((1, 0, 2))
+            ) / 2
+
+            joint_score_feature = joint_score.reshape(seq_len, -1)
+            transposed_joint_score_feature = joint_score.transpose((1, 0, 2)).reshape(
+                seq_len, -1
+            )
+            separate_pos = (
+                (
+                    np.linalg.norm(
+                        joint_score_feature[0 : seq_len - 1]
+                        - joint_score_feature[1:seq_len],
+                        axis=1,
+                    )
+                    + np.linalg.norm(
+                        transposed_joint_score_feature[0 : seq_len - 1]
+                        - transposed_joint_score_feature[1:seq_len],
+                        axis=1,
+                    )
+                )
+                * 0.5
+                > self.separate_threshold
+            ).nonzero()[0]
+            separate_position_preds.append([pos.item() for pos in separate_pos])
+            if len(separate_pos) > 0:
+                spans = [
+                    (0, separate_pos[0].item() + 1),
+                    (separate_pos[-1].item() + 1, seq_len),
+                ] + [
+                    (separate_pos[idx].item() + 1, separate_pos[idx + 1].item() + 1)
+                    for idx in range(len(separate_pos) - 1)
+                ]
+            else:
+                spans = [(0, seq_len)]
+
+            ents = []
+            for span in spans:
+                score = np.mean(
+                    joint_score[span[0] : span[1], span[0] : span[1], :], axis=(0, 1)
+                )
+                if not (np.max(score[ent_label]) < score[self.none_idx]):
+                    pred = ent_label[np.argmax(score[ent_label])].item()
+                    pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
+                    ents.append(span)
+                    ent_pred[span] = pred_label
+
+            for ent1 in ents:
+                for ent2 in ents:
+                    if ent1 == ent2:
+                        continue
+                    score = np.mean(
+                        joint_score[ent1[0] : ent1[1], ent2[0] : ent2[1], :],
+                        axis=(0, 1),
+                    )
+                    if not (np.max(score[rel_label]) < score[self.none_idx]):
+                        pred = rel_label[np.argmax(score[rel_label])].item()
+                        pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
+                        rel_pred[(ent1, ent2)] = pred_label
+
+            ent_preds.append(ent_pred)
+            rel_preds.append(rel_pred)
+
+        return separate_position_preds, ent_preds, rel_preds
 
     def decode(
         self, joint_score: np.ndarray, q_score: np.ndarray, text: str
