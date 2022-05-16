@@ -260,7 +260,7 @@ def match_sent_preds(
     outputs = [text_to_pred.get(s.sentText.lower(), empty) for s in sents]
 
     print("\nHow many pairs have empty preds?")
-    print(dict(num=len([p for p in outputs if p.json() == empty.json()])))
+    print(dict(num=len([p for p in outputs if p == empty])))
     return outputs
 
 
@@ -476,14 +476,28 @@ def test_q_preds(
 
     print("\nWhat are ent/relation/qualifier counts and scores?")
     for key in ["ents", "relations", "qualifiers"]:
-        counts = [len(s.dict()[key]) for s in sents]
-        scores = [x["score"] for s in sents for x in s.dict()[key]]
+        counts = [len(getattr(s, key)) for s in sents]
+        scores = [getattr(x, "score") for s in sents for x in getattr(s, key)]
         info = dict(
             key=key,
             counts=dict(min=min(counts), max=max(counts), avg=np.mean(counts)),
             scores=dict(min=min(scores), max=max(scores), avg=np.mean(scores)),
         )
         print(json.dumps(info, indent=2))
+
+    print("\nWhat are the predicted qualifier labels?")
+    print(Counter(q.label for s in sents for q in s.qualifiers))
+
+    random.seed(0)
+    for _ in range(10):
+        i = random.randint(0, len(sents))
+        s = sents[i]
+        q = sorted(s.qualifiers, key=lambda q: q.score)[-1]
+        tokens = s.text.split()
+        head = " ".join(tokens[q.head[0] : q.head[1]])
+        tail = " ".join(tokens[q.tail[0] : q.tail[1]])
+        value = " ".join(tokens[q.value[0] : q.value[1]])
+        print((head, tail, value, q.label))
 
 
 if __name__ == "__main__":
