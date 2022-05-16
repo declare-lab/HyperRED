@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple
 import fire
 import numpy as np
 from pydantic import BaseModel
+from pydantic.main import Extra
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
@@ -81,12 +82,106 @@ class Sentence(BaseModel):
     sentText: str
     entityMentions: List[Entity]
     relationMentions: List[Relation]
-    qualifierMentions: List[Qualifier]
+    qualifierMentions: List[Qualifier] = []
     wordpieceSentText: str
     wordpieceTokensIndex: List[Span]
     wordpieceSegmentIds: List[int]
     jointLabelMatrix: List[List[int]]
-    quintupletMatrix: SparseCube
+    quintupletMatrix: SparseCube = SparseCube.empty()
+
+    def check_span_overlap(self) -> bool:
+        entity_pos = [0 for _ in range(9999)]
+        for e in self.entityMentions:
+            st, ed = e.offset
+            for i in range(st, ed):
+                if entity_pos[i] != 0:
+                    return True
+                entity_pos[i] = 1
+        return False
+
+
+class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
+    tokens: np.ndarray
+    span2ent: Dict[Span, str]
+    span2rel: Dict[Tuple[Span, Span], int]
+    seq_len: int
+    joint_label_matrix: np.ndarray
+    joint_label_preds: np.ndarray
+    separate_positions: List[int]
+    all_separate_position_preds: List[int]
+    all_ent_preds: Dict[Span, str]
+    all_rel_preds: Dict[Tuple[Span, Span], str]
+    all_q_preds: Dict[Tuple[Span, Span, Span], str] = {}
+    all_rel_probs: Dict[Tuple[Span, Span], float] = {}
+    all_q_probs: Dict[Tuple[Span, Span, Span], float] = {}
+
+    def assert_valid(self):
+        assert self.tokens.size > 0
+        assert self.joint_label_matrix.size > 0
+        assert self.joint_label_preds.size > 0
+
+    @classmethod
+    def empty(cls):
+        return cls(
+            tokens=np.empty(shape=(1,)),
+            span2ent={},
+            span2rel={},
+            seq_len=0,
+            joint_label_matrix=np.empty(shape=(1,)),
+            joint_label_preds=np.empty(shape=(1,)),
+            separate_positions=[],
+            all_separate_position_preds=[],
+            all_ent_preds={},
+            all_rel_preds={},
+        )
+
+    def check_if_empty(self):
+        return self.seq_len == 0
+
+    def has_relations(self) -> bool:
+        return len(self.all_rel_preds.keys()) > 0
+
+    def as_sentence(self, vocab) -> Sentence:
+        tokens = [vocab.get_token_from_index(i, "tokens") for i in self.tokens]
+        tokens = [t for t in tokens if t != vocab.DEFAULT_PAD_TOKEN]
+        text = " ".join(tokens)
+
+        span_to_ent = {}
+        for span, label in self.all_ent_preds.items():
+            e = Entity(emId=str((span, label)), offset=span, text="", label=label)
+            span_to_ent[span] = e
+
+        relations = []
+        for (head, tail), label in self.all_rel_preds.items():
+            head_id = span_to_ent[head].emId
+            tail_id = span_to_ent[tail].emId
+            r = Relation(
+                em1Id=head_id, em2Id=tail_id, em1Text="", em2Text="", label=label
+            )
+            relations.append(r)
+
+        qualifiers = []
+        for (head, tail, value), label in self.all_q_preds.items():
+            q = Qualifier(
+                em1Id=span_to_ent[head].emId,
+                em2Id=span_to_ent[tail].emId,
+                em3Id=span_to_ent[value].emId,
+                label=label,
+            )
+            qualifiers.append(q)
+
+        return Sentence(
+            articleId=str((text, relations)),
+            sentText=text,
+            entityMentions=list(span_to_ent.values()),
+            relationMentions=relations,
+            qualifierMentions=qualifiers,
+            sentId=0,
+            wordpieceSentText="",
+            wordpieceTokensIndex=[],
+            wordpieceSegmentIds=[],
+            jointLabelMatrix=[],
+        )
 
 
 def make_sentences(path_in: str, path_out: str):

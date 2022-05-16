@@ -2,18 +2,17 @@ import json
 import pickle
 import random
 from collections import Counter
-from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
 from fire import Fire
-from pydantic import BaseModel
-from pydantic.main import Extra
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import Sentence as QuintupletSentence
+from data.q_process import RawPred, Sentence
 from inputs.vocabulary import Vocabulary
+from q_predict import match_sent_preds
+from scoring import EntityScorer, QuintupletScorer, StrictScorer
 
 
 def test_lengths(
@@ -103,144 +102,6 @@ def test_nyt(
                 print(json.dumps(info, indent=2))
 
 
-class Entity(BaseModel, extra=Extra.forbid):
-    emId: str
-    text: str
-    offset: Tuple[int, int]  # Token spans, start inclusive, end exclusive
-    label: str
-
-
-class Relation(BaseModel, extra=Extra.forbid):
-    em1Id: str
-    em1Text: str
-    em2Id: str
-    em2Text: str
-    label: str
-
-
-class Qualifier(BaseModel, extra=Extra.forbid):
-    em1Id: str
-    em2Id: str
-    em3Id: str
-    label: str
-
-
-class Sentence(BaseModel):
-    articleId: str
-    sentId: int
-    sentText: str
-    entityMentions: List[Entity]
-    relationMentions: List[Relation]
-    qualifierMentions: List[Qualifier] = []
-    wordpieceSentText: str
-    wordpieceTokensIndex: List[Tuple[int, int]]
-    wordpieceSegmentIds: List[int]
-    jointLabelMatrix: List[List[int]]
-
-    def check_span_overlap(self) -> bool:
-        entity_pos = [0 for _ in range(9999)]
-        for e in self.entityMentions:
-            st, ed = e.offset
-            for i in range(st, ed):
-                if entity_pos[i] != 0:
-                    return True
-                entity_pos[i] = 1
-        return False
-
-
-class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
-    tokens: np.ndarray
-    span2ent: Dict[Tuple[int, int], str]
-    span2rel: Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]
-    seq_len: int
-    joint_label_matrix: np.ndarray
-    joint_label_preds: np.ndarray
-    separate_positions: List[int]
-    all_separate_position_preds: List[int]
-    all_ent_preds: Dict[Tuple[int, int], str]
-    all_rel_preds: Dict[Tuple[Tuple[int, int], Tuple[int, int]], str]
-    all_q_preds: Dict[
-        Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]], str
-    ] = {}
-
-    def assert_valid(self):
-        assert self.tokens.size > 0
-        assert self.joint_label_matrix.size > 0
-        assert self.joint_label_preds.size > 0
-
-    @classmethod
-    def empty(cls):
-        return cls(
-            tokens=np.empty(shape=(1,)),
-            span2ent={},
-            span2rel={},
-            seq_len=0,
-            joint_label_matrix=np.empty(shape=(1,)),
-            joint_label_preds=np.empty(shape=(1,)),
-            separate_positions=[],
-            all_separate_position_preds=[],
-            all_ent_preds={},
-            all_rel_preds={},
-        )
-
-    def check_if_empty(self):
-        return self.seq_len == 0
-
-    def has_relations(self) -> bool:
-        return len(self.all_rel_preds.keys()) > 0
-
-    def as_sentence(self, vocab: Vocabulary) -> Sentence:
-        tokens = [vocab.get_token_from_index(i, "tokens") for i in self.tokens]
-        tokens = [t for t in tokens if t != vocab.DEFAULT_PAD_TOKEN]
-        text = " ".join(tokens)
-
-        span_to_ent = {}
-        for span, label in self.all_ent_preds.items():
-            e = Entity(emId=str((span, label)), offset=span, text="", label=label)
-            span_to_ent[span] = e
-
-        relations = []
-        for (head, tail), label in self.all_rel_preds.items():
-            head_id = span_to_ent[head].emId
-            tail_id = span_to_ent[tail].emId
-            r = Relation(
-                em1Id=head_id, em2Id=tail_id, em1Text="", em2Text="", label=label
-            )
-            relations.append(r)
-
-        qualifiers = []
-        for (head, tail, value), label in self.all_q_preds.items():
-            q = Qualifier(
-                em1Id=span_to_ent[head].emId,
-                em2Id=span_to_ent[tail].emId,
-                em3Id=span_to_ent[value].emId,
-                label=label,
-            )
-            qualifiers.append(q)
-
-        return Sentence(
-            articleId=str((text, relations)),
-            sentText=text,
-            entityMentions=list(span_to_ent.values()),
-            relationMentions=relations,
-            qualifierMentions=qualifiers,
-            sentId=0,
-            wordpieceSentText="",
-            wordpieceTokensIndex=[],
-            wordpieceSegmentIds=[],
-            jointLabelMatrix=[],
-        )
-
-
-def is_span_overlap(a: Tuple[int, int], b: Tuple[int, int]) -> bool:
-    return (
-        b[0] <= a[0] < b[1]
-        or b[0] <= a[1] < b[1]
-        or a[0] <= b[0] < a[1]
-        or a[0] <= b[1] < a[1]
-    )
-
-
 def test_data(path: str = "data/ACE2005/test.json"):
     with open(path) as f:
         sents = [Sentence(**json.loads(line)) for line in f]
@@ -254,106 +115,6 @@ def test_data(path: str = "data/ACE2005/test.json"):
 
     print("\nHow many have span overlap?")
     print(len([s for s in sents if s.check_span_overlap()]))
-
-
-def match_sent_preds(
-    sents: List[Sentence], raw_preds: List[RawPred], vocab: Vocabulary
-) -> List[Sentence]:
-    preds = [p.as_sentence(vocab) for p in raw_preds]
-    text_to_pred = {p.sentText.lower(): p for p in preds}
-
-    empty = RawPred.empty().as_sentence(vocab)
-    outputs = [text_to_pred.get(s.sentText.lower(), empty) for s in sents]
-
-    print("\nHow many pairs have empty preds?")
-    print(dict(num=len([p for p in outputs if p == empty])))
-    return outputs
-
-
-def safe_divide(a: float, b: float) -> float:
-    if a == 0.0 or b == 0.0:
-        return 0.0
-    return a / b
-
-
-class Scorer:
-    def run(self, pred: List[Sentence], gold: List[Sentence]) -> Dict[str, float]:
-        raise NotImplementedError
-
-
-class StrictScorer:
-    def make_sent_tuples(
-        self, s: Sentence
-    ) -> List[Tuple[Tuple[int, int, str], Tuple[int, int, str], str]]:
-        id_to_entity = {e.emId: e for e in s.entityMentions}
-        tuples = []
-        for r in s.relationMentions:
-            head = id_to_entity[r.em1Id]
-            tail = id_to_entity[r.em2Id]
-            t = (
-                (head.offset[0], head.offset[1], head.label),
-                (tail.offset[0], tail.offset[1], tail.label),
-                r.label,
-            )
-            tuples.append(t)
-        return tuples
-
-    def run(self, pred: List[Sentence], gold: List[Sentence]) -> Dict[str, float]:
-        assert len(pred) == len(gold)
-        num_correct = 0
-        num_pred = 0
-        num_gold = 0
-
-        for p, g in zip(pred, gold):
-            tuples_pred = self.make_sent_tuples(p)
-            tuples_gold = self.make_sent_tuples(g)
-            num_pred += len(tuples_pred)
-            num_gold += len(tuples_gold)
-            for a in tuples_pred:
-                for b in tuples_gold:
-                    if a == b:
-                        num_correct += 1
-
-        precision = safe_divide(num_correct, num_pred)
-        recall = safe_divide(num_correct, num_gold)
-        f1 = safe_divide(2 * precision * recall, precision + recall)
-
-        return dict(
-            num_correct=num_correct,
-            num_pred=num_pred,
-            num_gold=num_gold,
-            precision=precision,
-            recall=recall,
-            f1=f1,
-        )
-
-
-class QuintupletScorer(StrictScorer):
-    def make_sent_tuples(
-        self, s: Sentence
-    ) -> List[Tuple[int, int, int, int, int, int, str, str]]:
-        id_to_entity = {e.emId: e for e in s.entityMentions}
-        pair_to_relation = {(r.em1Id, r.em2Id): r.label for r in s.relationMentions}
-
-        tuples = []
-        for q in s.qualifierMentions:
-            head = id_to_entity[q.em1Id]
-            tail = id_to_entity[q.em2Id]
-            value = id_to_entity[q.em3Id]
-            relation = pair_to_relation.get((q.em1Id, q.em2Id))
-            if relation is not None:
-                t = (
-                    head.offset[0],
-                    head.offset[1],
-                    tail.offset[0],
-                    tail.offset[1],
-                    value.offset[0],
-                    value.offset[1],
-                    relation,
-                    q.label,
-                )
-                tuples.append(t)
-        return tuples
 
 
 def test_preds(
@@ -385,7 +146,7 @@ def test_preds(
         sents = [Sentence(**json.loads(line)) for line in f]
 
     preds = match_sent_preds(sents, raw_preds, vocab)
-    for scorer in [StrictScorer(), QuintupletScorer()]:
+    for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
         results = scorer.run(preds, sents)
         results = dict(scorer=type(scorer).__name__, **results)
         print(json.dumps(results, indent=2))
@@ -393,7 +154,7 @@ def test_preds(
 
 def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     with open(path) as f:
-        sents = [QuintupletSentence(**json.loads(line)) for line in tqdm(f)]
+        sents = [Sentence(**json.loads(line)) for line in tqdm(f)]
 
     print("\nWhat fraction of the cubes (quintuplets) are empty?")
     total = 0
