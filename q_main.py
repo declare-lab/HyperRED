@@ -409,6 +409,94 @@ python q_main.py \
 --pretrain_epochs 0 \
 --device 0
 
+p q_predict.py run_eval --data_split test
+
+p analysis.py test_preds \
+--path_pred ckpt/quintuplet/raw_test.pkl \
+--path_gold data/quintuplet/test.json \
+--path_vocab ckpt/quintuplet/vocabulary.pickle
+
+{                               
+  "scorer": "EntityScorer",     
+  "num_correct": 12370,         
+  "num_pred": 14330,                                            
+  "num_gold": 17127,                                            
+  "precision": 0.8632240055826936,                              
+  "recall": 0.7222514158930344,                                 
+  "f1": 0.7864704199383286                                      
+}
+{
+  "scorer": "StrictScorer",
+  "num_correct": 3639,                                  
+  "num_pred": 5199,   
+  "num_gold": 6093,
+  "precision": 0.6999422965954991,
+  "recall": 0.5972427375677006,  
+  "f1": 0.6445270988310309                              
+}
+{
+  "scorer": "QuintupletScorer",
+  "num_correct": 2000,
+  "num_pred": 3294,
+  "num_gold": 6738,
+  "precision": 0.607164541590771,
+  "recall": 0.2968239833778569,
+  "f1": 0.39872408293460926
+}
+
+python q_main.py \
+--train_file train_extra_ents.json \
+--ent_rel_file label_vocab.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--save_dir ckpt/quintuplet_extra_ents \
+--data_dir data/quintuplet \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval \
+--path ckpt/quintuplet_extra_ents/last_model \
+--path_data ckpt/quintuplet_extra_ents/dataset.pickle \
+--data_split test
+
+p analysis.py test_preds \
+--path_pred ckpt/quintuplet_extra_ents/raw_test.pkl \
+--path_gold data/quintuplet/test.json \
+--path_vocab ckpt/quintuplet_extra_ents/vocabulary.pickle
+
+{    
+  "scorer": "EntityScorer",
+  "num_correct": 15069,
+  "num_pred": 29322,
+  "num_gold": 17127,                                            
+  "precision": 0.513914466953141,
+  "recall": 0.8798388509371168,
+  "f1": 0.6488406639540141
+}
+{
+  "scorer": "StrictScorer",
+  "num_correct": 3588,
+  "num_pred": 5081,
+  "num_gold": 6093,
+  "precision": 0.7061602046841173,
+  "recall": 0.5888724766125062,
+  "f1": 0.642205119026311
+}
+{
+  "scorer": "QuintupletScorer",
+  "num_correct": 445,
+  "num_pred": 694,
+  "num_gold": 6738,
+  "precision": 0.6412103746397695,
+  "recall": 0.06604333630157316,
+  "f1": 0.11975242195909581
+}
+
 """
 
 

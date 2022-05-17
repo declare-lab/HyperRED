@@ -396,6 +396,33 @@ def make_label_file(pattern_in: str, path_out: str):
         f.write(json.dumps(info, indent=2))
 
 
+def add_extra_entities(path_in: str, path_ents: str, path_out: str):
+    text_to_ents = {}
+    with open(path_ents) as f:
+        for line in f:
+            raw = json.loads(line)
+            text = " ".join(raw["tokens"])
+            text_to_ents[text] = [tuple([start, end]) for start, end in raw["ents"]]
+
+    with open(path_in) as f_in, open(path_out, "w") as f_out:
+        for line in tqdm(f_in.readlines()):
+            sent = Sentence(**json.loads(line))
+            ents = text_to_ents[sent.sentText]
+            label = sent.entityMentions[0].label
+            assert set(ents).issuperset([e.offset for e in sent.entityMentions])
+            tokens = sent.sentText.split()
+            sent.entityMentions = [
+                Entity(
+                    emId=str(span),
+                    offset=span,
+                    text=" ".join(tokens[span[0] : span[1]]),
+                    label=label,
+                )
+                for span in ents
+            ]
+            f_out.write(sent.json() + "\n")
+
+
 """
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
@@ -407,6 +434,12 @@ p data/q_process.py apply_top_qualifiers temp/dev.json temp/dev.json temp/labels
 p data/q_process.py apply_top_qualifiers temp/test.json temp/test.json temp/labels.txt
 p data/q_process.py make_label_file "temp/*.json" data/quintuplet/label_vocab.json
 
+p data/q_process.py add_extra_entities \
+--path_in temp/train.json \
+--path_ents ../quintuplet/outputs/data/match_trex/sent_entities.jsonl \
+--path_out temp/train_extra_ents.json
+
+p data/q_process.py process temp/train_extra_ents.json data/quintuplet/train_extra_ents.json
 p data/q_process.py process temp/train.json data/quintuplet/train.json
 p data/q_process.py process temp/dev.json data/quintuplet/dev.json
 p data/q_process.py process temp/test.json data/quintuplet/test.json

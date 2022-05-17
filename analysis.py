@@ -156,6 +156,10 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     with open(path) as f:
         sents = [Sentence(**json.loads(line)) for line in tqdm(f)]
 
+    print("\nHow many entities per sentence?")
+    lengths = [len(s.entityMentions) for s in sents]
+    print(np.mean(lengths))
+
     print("\nWhat fraction of the cubes (quintuplets) are empty?")
     total = 0
     filled = 0
