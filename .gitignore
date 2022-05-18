@@ -1,6 +1,5 @@
 temp/
-data/ACE2005/*.json
-data/quintuplet/*.json
+data/*/*.json
 pyrightconfig.json
 tags
 json/

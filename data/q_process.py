@@ -444,6 +444,29 @@ p data/q_process.py process temp/train.json data/quintuplet/train.json
 p data/q_process.py process temp/dev.json data/quintuplet/dev.json
 p data/q_process.py process temp/test.json data/quintuplet/test.json
 
+################################################################################
+
+rm -rf temp
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/train.json temp/train.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/dev.json temp/dev.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/test.json temp/test.json
+p data/q_process.py make_label_file "temp/*.json" data/q10/label.json
+
+p data/q_process.py process temp/train.json data/q10/train.json data/q10/label.json
+p data/q_process.py process temp/dev.json data/q10/dev.json data/q10/label.json
+p data/q_process.py process temp/test.json data/q10/test.json data/q10/label.json
+
+rm -rf temp
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/train.json temp/train.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/dev.json temp/dev.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/test.json temp/test.json
+p data/q_process.py make_label_file "temp/*.json" data/q30/label.json
+
+p data/q_process.py process temp/train.json data/q30/train.json data/q30/label.json
+p data/q_process.py process temp/dev.json data/q30/dev.json data/q30/label.json
+p data/q_process.py process temp/test.json data/q30/test.json data/q30/label.json
+
+
 """
 
 
