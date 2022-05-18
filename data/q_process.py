@@ -57,6 +57,18 @@ class SparseCube(BaseModel):
     shape: Tuple[int, int, int]
     entries: List[Tuple[int, int, int, int]]
 
+    def check_equal(self, other):
+        assert isinstance(other, SparseCube)
+        return self.shape == other.shape and set(self.entries) == set(other.entries)
+
+    @classmethod
+    def from_numpy(cls, x: np.ndarray):
+        entries = []
+        i_list, j_list, k_list = x.nonzero()
+        for i, j, k in zip(i_list, j_list, k_list):
+            entries.append((i, j, k, x[i, j, k]))
+        return cls(shape=tuple(x.shape), entries=entries)
+
     def numpy(self) -> np.ndarray:
         x = np.zeros(shape=self.shape)
         for i, j, k, value in self.entries:
@@ -107,6 +119,7 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     seq_len: int
     joint_label_matrix: np.ndarray
     joint_label_preds: np.ndarray
+    quintuplet_preds: SparseCube = SparseCube.empty()
     separate_positions: List[int]
     all_separate_position_preds: List[int]
     all_ent_preds: Dict[Span, str]

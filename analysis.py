@@ -2,6 +2,7 @@ import json
 import pickle
 import random
 from collections import Counter
+from typing import List
 
 import numpy as np
 import torch
@@ -9,7 +10,7 @@ from fire import Fire
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import RawPred, Sentence
+from data.q_process import RawPred, Sentence, SparseCube
 from inputs.vocabulary import Vocabulary
 from q_predict import match_sent_preds
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
@@ -117,19 +118,23 @@ def test_data(path: str = "data/ACE2005/test.json"):
     print(len([s for s in sents if s.check_span_overlap()]))
 
 
-def test_preds(
-    path_pred: str = "ckpt/ace2005_bert/pred.pkl",
-    path_gold: str = "data/ACE2005/test.json",
-    path_vocab: str = "ckpt/ace2005_bert/vocabulary.pickle",
-):
+def load_raw_preds(path: str) -> List[RawPred]:
     raw_preds = []
-    with open(path_pred, "rb") as f:
+    with open(path, "rb") as f:
         raw = pickle.load(f)
         for r in raw:
             p = RawPred(**r)
             p.assert_valid()
             raw_preds.append(p)
+    return raw_preds
 
+
+def test_preds(
+    path_pred: str = "ckpt/ace2005_bert/pred.pkl",
+    path_gold: str = "data/ACE2005/test.json",
+    path_vocab: str = "ckpt/ace2005_bert/vocabulary.pickle",
+):
+    raw_preds = load_raw_preds(path_pred)
     vocab = Vocabulary.load(path_vocab)
     for p in raw_preds:
         if p.has_relations():
@@ -271,6 +276,24 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     threshold = sorted(counter.values())[-top_k]
     remainder = sum(v for v in counter.values() if v >= threshold)
     print(dict(threshold=threshold, remainder=remainder, total=len(qualifiers)))
+
+
+def test_sparse_cube(path: str = "data/q10/dev.json"):
+    with open(path) as f:
+        for line in tqdm(f.readlines()):
+            sent = Sentence(**json.loads(line))
+            matrix = sent.quintupletMatrix
+            x = matrix.numpy()
+            new = SparseCube.from_numpy(x)
+            if not matrix.check_equal(new):
+                print("Rarely (0.001), orig cube has multiple entries in same i,j,k")
+
+
+def test_raw_q_preds(path: str = "ckpt/q10/raw_test.pkl"):
+    preds = load_raw_preds(path)
+    print("\nHow many preds have at least one q_matrix entry?")
+    num = sum(1 for p in preds if len(p.quintuplet_preds.entries) > 0)
+    print(dict(total=len(preds), num=num))
 
 
 if __name__ == "__main__":

@@ -140,7 +140,7 @@ class EntRelJointDecoder(nn.Module):
             results["joint_label_preds"] = torch.argmax(
                 batch_normalized_joint_score, dim=-1
             )
-            # results["quintuplet_preds"] = torch.argmax(batch_normalized_q_score, dim=-1)
+            results["quintuplet_preds"] = torch.argmax(batch_normalized_q_score, dim=-1)
 
             batch_seq_tokens_lens = batch_inputs["tokens_lens"]
             decode_preds = self.soft_joint_decoding(

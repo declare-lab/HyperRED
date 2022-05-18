@@ -16,6 +16,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
+from data.q_process import SparseCube
 from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
 from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField
@@ -232,6 +233,9 @@ def process_outputs(
         sent_output["joint_label_preds"] = (
             batch_outputs["joint_label_preds"][sent_idx].cpu().numpy()
         )
+        sent_output["quintuplet_preds"] = SparseCube.from_numpy(
+            batch_outputs["quintuplet_preds"][sent_idx].cpu().numpy()
+        ).dict()
         sent_output["separate_positions"] = batch_inputs["separate_positions"][sent_idx]
         sent_output["all_separate_position_preds"] = batch_outputs[
             "all_separate_position_preds"
@@ -518,13 +522,13 @@ p analysis.py test_preds \
 --path_gold data/q30/test.json \
 --path_vocab ckpt/q30/vocabulary.pickle
 
-{                                                                                                                               
-  "scorer": "EntityScorer",                                                                                                     
-  "num_correct": 3948,                                                                                                          
-  "num_pred": 4365,                                                                                                             
-  "num_gold": 5777,                                                                                                               "precision": 0.90446735395189,                                                                                                
-  "recall": 0.683399688419595,                                                                                                  
-  "f1": 0.778544665746401                                                                                                       
+{
+  "scorer": "EntityScorer",
+  "num_correct": 3948,    
+  "num_pred": 4365,      
+  "num_gold": 5777,     
+  "recall": 0.683399688419595,
+  "f1": 0.778544665746401    
 }
 {                                                                                                                               
   "scorer": "StrictScorer",                                                                                                     
