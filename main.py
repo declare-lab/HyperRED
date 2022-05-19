@@ -475,6 +475,60 @@ p analysis.py test_preds \
   "f1": 0.6397674213725663
 }
 
+python main.py \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q10_triplet \
+--data_dir data/q10 \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p analysis.py test_preds \
+--path_pred ckpt/q10_triplet/pred.pkl \
+--path_gold data/q10/test.json \
+--path_vocab ckpt/q10_triplet/vocabulary.pickle
+
+{
+  "scorer": "StrictScorer",
+  "num_correct": 1681,
+  "num_pred": 2221,                                     
+  "num_gold": 2312,
+  "precision": 0.7568662764520486,
+  "recall": 0.7270761245674741,
+  "f1": 0.7416721817780718
+}
+
+python main.py \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q30_triplet \
+--data_dir data/q30 \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p analysis.py test_preds \
+--path_pred ckpt/q30_triplet/pred.pkl \
+--path_gold data/q30/test.json \
+--path_vocab ckpt/q30_triplet/vocabulary.pickle
+
+{                                                     
+  "scorer": "StrictScorer",
+  "num_correct": 1601,
+  "num_pred": 2023,                                    
+  "num_gold": 2060,
+  "precision": 0.791398912506179,
+  "recall": 0.7771844660194175,
+  "f1": 0.784227283859907
+}
+
 """
 
 
