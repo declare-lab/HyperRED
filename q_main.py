@@ -248,10 +248,30 @@ def process_outputs(
     return all_outputs
 
 
-def evaluate(cfg: Namespace, dataset: Dataset, model: nn.Module, data_split: str):
+def evaluate(
+    cfg: Namespace,
+    dataset: Dataset,
+    model: nn.Module,
+    data_split: str,
+    path_in: str = "",
+):
     model.zero_grad()
     losses = []
     all_outputs = []
+
+    if path_in:
+        data_split = "pred"
+        max_len = {
+            "tokens": cfg.max_sent_len,
+            "wordpiece_tokens": cfg.max_wordpiece_len,
+        }
+        reader = ACEReaderForJointDecoding(path_in, False, max_len)
+        fields = dataset.instance_dict["test"]["instance"].fields
+        instance = Instance(fields)
+        dataset.add_instance(
+            data_split, instance, reader, is_count=True, is_train=False
+        )
+        dataset.process_instance(data_split)
 
     num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
     for _, batch in tqdm(
@@ -570,8 +590,6 @@ p q_main.py \
 --pretrain_epochs 0 \
 --device 0
 
-p q_predict.py run_eval ckpt/q10_tagger/best_model ckpt/q10_tagger/dataset.pickle test tagger
-
 ################################################################################
 Tagger task (30)
 
@@ -588,8 +606,6 @@ p q_main.py \
 --epochs 30 \
 --pretrain_epochs 0 \
 --device 0
-
-p q_predict.py run_eval ckpt/q30_tagger/best_model ckpt/q30_tagger/dataset.pickle test tagger
 
 """
 

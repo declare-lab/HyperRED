@@ -3,7 +3,7 @@ from typing import List
 
 from fire import Fire
 
-from data.q_process import RawPred, Sentence
+from data.q_process import RawPred, Sentence, process_tags
 from inputs.datasets.q_dataset import Dataset
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
@@ -30,6 +30,7 @@ def run_eval(
     path_data="ckpt/quintuplet/dataset.pickle",
     data_split: str = "dev",
     task: str = "quintuplet",
+    path_in: str = "",
 ):
     if task == "tagger":
         model = Tagger.load(path)
@@ -38,7 +39,7 @@ def run_eval(
 
     dataset = Dataset.load(path_data)
     cfg = model.cfg
-    evaluate(cfg, dataset, model, data_split)
+    evaluate(cfg, dataset, model, data_split, path_in=path_in)
 
 
 def load_raw_preds(path: str) -> List[RawPred]:
@@ -98,10 +99,35 @@ def merge_pipeline_preds(
         pickle.dump(outputs, f)
 
 
+def prepare_tagger_pred_inputs(
+    path_triplets: str,
+    path_vocab: str,
+    path_out: str,
+    path_temp: str = "temp.json",
+    **kwargs
+):
+    vocab = Vocabulary.load(path_vocab)
+    with open(path_temp, "w") as f:
+        for r in load_raw_preds(path_triplets):
+            f.write(r.as_sentence(vocab).json() + "\n")
+    process_tags(path_in="", path_out=path_out, path_sents_in=path_temp, **kwargs)
+
+
 """
+p q_predict.py prepare_tagger_pred_inputs \
+--path_triplets ckpt/q10_triplet/pred.pkl \
+--path_vocab ckpt/q10_triplet/vocabulary.pickle \
+--path_out ckpt/q10_triplet/tagger_in.json \
+--label_file data/q10/label.json
+
+p q_predict.py run_eval ckpt/q10_tagger/best_model ckpt/q10_tagger/dataset.pickle \
+--data_split dummy \
+--task tagger \
+--path_in ckpt/q10_triplet/tagger_in.json
+
 p q_predict.py merge_pipeline_preds \
 --path_triplets ckpt/q10_triplet/pred.pkl \
---path_tags ckpt/q10_tagger/raw_test.pkl \
+--path_tags ckpt/q10_tagger/raw_pred.pkl \
 --path_vocab_triplets ckpt/q10_triplet/vocabulary.pickle \
 --path_vocab_tags ckpt/q10_tagger/vocabulary.pickle \
 --path_out ckpt/q10_tagger/pred.pkl
@@ -114,11 +140,44 @@ p analysis.py test_preds \
 {
   "scorer": "QuintupletScorer",
   "num_correct": 1762,
-  "num_pred": 1959,
+  "num_pred": 2560,
   "num_gold": 2595,
-  "precision": 0.8994384890250128,
+  "precision": 0.68828125,
   "recall": 0.6789980732177264,
-  "f1": 0.7738252086078172
+  "f1": 0.68360814742968
+}
+
+p q_predict.py prepare_tagger_pred_inputs \
+--path_triplets ckpt/q30_triplet/pred.pkl \
+--path_vocab ckpt/q30_triplet/vocabulary.pickle \
+--path_out ckpt/q30_triplet/tagger_in.json \
+--label_file data/q30/label.json
+
+p q_predict.py run_eval ckpt/q30_tagger/best_model ckpt/q30_tagger/dataset.pickle \
+--data_split dummy \
+--task tagger \
+--path_in ckpt/q30_triplet/tagger_in.json
+
+p q_predict.py merge_pipeline_preds \
+--path_triplets ckpt/q30_triplet/pred.pkl \
+--path_tags ckpt/q30_tagger/raw_pred.pkl \
+--path_vocab_triplets ckpt/q30_triplet/vocabulary.pickle \
+--path_vocab_tags ckpt/q30_tagger/vocabulary.pickle \
+--path_out ckpt/q30_tagger/pred.pkl
+
+p analysis.py test_preds \
+--path_pred ckpt/q30_tagger/pred.pkl \
+--path_gold data/q30/test.json \
+--path_vocab ckpt/q30_triplet/vocabulary.pickle
+
+{
+  "scorer": "QuintupletScorer",
+  "num_correct": 1700,
+  "num_pred": 2355,
+  "num_gold": 2302,
+  "precision": 0.721868365180467,
+  "recall": 0.738488271068636,
+  "f1": 0.7300837449001503
 }
 
 """

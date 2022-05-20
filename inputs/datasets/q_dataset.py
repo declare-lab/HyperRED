@@ -113,27 +113,31 @@ class Dataset:
 
         self.vocab = vocab
 
-        for instance_name, instance_settting in self.instance_dict.items():
-            instance_settting["instance"].index(self.vocab, instance_settting["reader"])
-            self.datasets[instance_name] = instance_settting["instance"].get_instance()
-            self.instance_dict[instance_name]["size"] = instance_settting[
-                "instance"
-            ].get_size()
-            self.instance_dict[instance_name]["vocab_dict"] = instance_settting[
-                "instance"
-            ].get_vocab_dict()
+        for instance_name in self.instance_dict.keys():
+            self.process_instance(instance_name)
 
+    def process_instance(self, instance_name: str):
+        instance_settting = self.instance_dict[instance_name]
+        instance_settting["instance"].index(self.vocab, instance_settting["reader"])
+        self.datasets[instance_name] = instance_settting["instance"].get_instance()
+        self.instance_dict[instance_name]["size"] = instance_settting[
+            "instance"
+        ].get_size()
+        self.instance_dict[instance_name]["vocab_dict"] = instance_settting[
+            "instance"
+        ].get_vocab_dict()
+
+        logger.info(
+            "{} dataset size: {}.".format(
+                instance_name, self.instance_dict[instance_name]["size"]
+            )
+        )
+        for key, seq_len in instance_settting["reader"].get_seq_lens().items():
             logger.info(
-                "{} dataset size: {}.".format(
-                    instance_name, self.instance_dict[instance_name]["size"]
+                "{} dataset's {}: max_len={}, min_len={}.".format(
+                    instance_name, key, max(seq_len), min(seq_len)
                 )
             )
-            for key, seq_len in instance_settting["reader"].get_seq_lens().items():
-                logger.info(
-                    "{} dataset's {}: max_len={}, min_len={}.".format(
-                        instance_name, key, max(seq_len), min(seq_len)
-                    )
-                )
 
     def make_quintuplet_batch(
         self, dataset: Dict[str, list], sorted_ids: List[int]

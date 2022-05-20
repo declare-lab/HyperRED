@@ -161,7 +161,12 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
 
         span_to_ent = {}
         for span, label in self.all_ent_preds.items():
-            e = Entity(emId=str((span, label)), offset=span, text="", label=label)
+            e = Entity(
+                emId=str((span, label)),
+                offset=span,
+                text=" ".join(tokens[slice(*span)]),
+                label=label,
+            )
             span_to_ent[span] = e
 
         relations = []
@@ -378,7 +383,7 @@ def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
         parts = [sent.sentText, head.text, r.label, tail.text]
         text = " | ".join(parts)
         ents = []
-        for q in pair_to_qualifiers[(r.em1Id, r.em2Id)]:
+        for q in pair_to_qualifiers.get((r.em1Id, r.em2Id), []):
             e = id_to_entity[q.em3Id].copy(deep=True)
             e.label = q.label
             ents.append(e)
@@ -394,9 +399,19 @@ def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
     return outputs
 
 
-def process_tags(path_in: str, path_out: str, path_temp: str = "temp.json", **kwargs):
+def process_tags(
+    path_in: str,
+    path_out: str,
+    path_temp: str = "temp.json",
+    path_sents_in: str = "",
+    **kwargs
+):
     print(dict(process_tags=locals()))
-    make_sentences(path_in, path_temp)
+    if path_sents_in:
+        del path_in
+        path_temp = path_sents_in
+    else:
+        make_sentences(path_in, path_temp)
     with open(path_temp) as f:
         sents = [Sentence(**json.loads(line)) for line in tqdm(f.readlines())]
 
