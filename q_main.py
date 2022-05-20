@@ -25,6 +25,7 @@ from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
+from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
 from utils.eval import eval_file
 from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
@@ -247,9 +248,7 @@ def process_outputs(
     return all_outputs
 
 
-def evaluate(
-    cfg: Namespace, dataset: Dataset, model: EntRelJointDecoder, data_split: str
-):
+def evaluate(cfg: Namespace, dataset: Dataset, model: nn.Module, data_split: str):
     model.zero_grad()
     losses = []
     all_outputs = []
@@ -390,6 +389,9 @@ def main():
 
     # joint model
     model = EntRelJointDecoder(cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
+    logger.info(str(dict(task=cfg.task)))
+    if cfg.task == "tagger":
+        model = Tagger(cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
@@ -398,6 +400,7 @@ def main():
 
 
 """
+Distant supervised experiment
 
 python q_main.py \
 --ent_rel_file label_vocab.json \
@@ -449,6 +452,7 @@ p analysis.py test_preds \
 }
 
 ################################################################################
+Distant supervised + filtered dev/test (10)
 
 python q_main.py \
 --ent_rel_file label.json \
@@ -500,6 +504,7 @@ p analysis.py test_preds \
 }
 
 ################################################################################
+Distant supervised + filtered dev/test (10)
 
 python q_main.py \
 --ent_rel_file label.json \
@@ -547,6 +552,44 @@ p analysis.py test_preds \
   "recall": 0.20894874022589052, 
   "f1": 0.32023968042609857
 }
+
+################################################################################
+Tagger task (10)
+
+p q_main.py \
+--task tagger \
+--ent_rel_file label.json \
+--train_batch_size 32 \
+--config_file config.yml \
+--save_dir ckpt/q10_tagger \
+--data_dir data/q10_tagger \
+--fine_tune \
+--max_sent_len 90 \
+--max_wordpiece_len 90 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q10_tagger/best_model ckpt/q10_tagger/dataset.pickle test tagger
+
+################################################################################
+Tagger task (30)
+
+p q_main.py \
+--task tagger \
+--ent_rel_file label.json \
+--train_batch_size 32 \
+--config_file config.yml \
+--save_dir ckpt/q30_tagger \
+--data_dir data/q30_tagger \
+--fine_tune \
+--max_sent_len 90 \
+--max_wordpiece_len 90 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q30_tagger/best_model ckpt/q30_tagger/dataset.pickle test tagger
 
 """
 

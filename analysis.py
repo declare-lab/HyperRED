@@ -1,5 +1,4 @@
 import json
-import pickle
 import random
 from collections import Counter
 from typing import List
@@ -10,9 +9,10 @@ from fire import Fire
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import RawPred, Sentence, SparseCube
+from data.q_process import Sentence, SparseCube
 from inputs.vocabulary import Vocabulary
-from q_predict import match_sent_preds
+from models.joint_decoding.q_tagger import decode_nonzero_spans
+from q_predict import load_raw_preds, match_sent_preds
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
 
 
@@ -116,17 +116,6 @@ def test_data(path: str = "data/ACE2005/test.json"):
 
     print("\nHow many have span overlap?")
     print(len([s for s in sents if s.check_span_overlap()]))
-
-
-def load_raw_preds(path: str) -> List[RawPred]:
-    raw_preds = []
-    with open(path, "rb") as f:
-        raw = pickle.load(f)
-        for r in raw:
-            p = RawPred(**r)
-            p.assert_valid()
-            raw_preds.append(p)
-    return raw_preds
 
 
 def test_preds(
@@ -294,6 +283,124 @@ def test_raw_q_preds(path: str = "ckpt/q10/raw_test.pkl"):
     print("\nHow many preds have at least one q_matrix entry?")
     num = sum(1 for p in preds if len(p.quintuplet_preds.entries) > 0)
     print(dict(total=len(preds), num=num))
+
+
+def test_decode_nonzero_spans():
+    for labels in [[0, 0, 0], [0, 0, 1, 2], [0, 1, 1, 0], [1, 0, 0, 1], [1, 1, 1]]:
+        spans = decode_nonzero_spans(labels)
+        print(dict(labels=labels, spans=spans, values=[labels[a:b] for a, b in spans]))
+
+
+def analyze_sents(sents: List[Sentence]) -> dict:
+    relations = [r.label for s in sents for r in s.relationMentions]
+    qualifiers = [q.label for s in sents for q in s.qualifierMentions]
+    entity_labels = [e.label for s in sents for e in s.entityMentions]
+    info = dict(
+        triplets=len(relations),
+        quintuplets=len(qualifiers),
+        ents=len(entity_labels),
+        relations=len(set(relations)),
+        qualifiers=len(set(qualifiers)),
+        entity_labels=len(set(entity_labels)),
+    )
+    return info
+
+
+def compare_tag_data(
+    path_tag: str = "data/q10_tagger/dev.json", path_orig="data/q10/dev.json"
+):
+    with open(path_orig) as f:
+        sents_orig = [Sentence(**json.loads(line)) for line in f]
+    with open(path_tag) as f:
+        sents_tag = [Sentence(**json.loads(line)) for line in f]
+
+    print("\nOrig stats?")
+    print(json.dumps(analyze_sents(sents_orig)))
+    print("\nNew stats?")
+    print(json.dumps(analyze_sents(sents_tag)))
+
+    print("\nCan the spans in table be decoded correctly?")
+    decoded_spans = []
+    correct_spans = []
+    for s in sents_tag:
+        labels = np.array(s.jointLabelMatrix).diagonal()
+        gold = set(e.offset for e in s.entityMentions)
+        spans = decode_nonzero_spans([int(x) for x in labels])
+        decoded_spans.extend(spans)
+        correct_spans.extend([sp for sp in spans if sp in gold])
+    print(dict(decoded_spans=len(decoded_spans), correct_spans=len(correct_spans)))
+
+
+"""
+Roberta experiments
+
+################################################################################
+Roberta q10 and q30
+ 
+rm -rf temp
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/train.json temp/train.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/dev.json temp/dev.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/test.json temp/test.json
+p data/q_process.py make_label_file "temp/*.json" data/q10r/label.json
+
+p data/q_process.py process temp/train.json data/q10r/train.json data/q10r/label.json roberta-base
+p data/q_process.py process temp/dev.json data/q10r/dev.json data/q10r/label.json roberta-base
+p data/q_process.py process temp/test.json data/q10r/test.json data/q10r/label.json roberta-base
+
+rm -rf temp
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/train.json temp/train.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/dev.json temp/dev.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/test.json temp/test.json
+p data/q_process.py make_label_file "temp/*.json" data/q30r/label.json
+
+p data/q_process.py process temp/train.json data/q30r/train.json data/q30r/label.json roberta-base
+p data/q_process.py process temp/dev.json data/q30r/dev.json data/q30r/label.json roberta-base
+p data/q_process.py process temp/test.json data/q30r/test.json data/q10r/label.json roberta-base
+
+################################################################################
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name roberta-base \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--save_dir ckpt/q30r \
+--data_dir data/q30r \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name bert-base-uncased \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--save_dir ckpt/q30b \
+--data_dir data/q30 \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+Findings
+- FP16 doesn't significantly change speed or results
+
+Tasks
+- implement 2nd stage tagger
+- debug quintuplet decoding
+- debug roberta
+
+"""
 
 
 if __name__ == "__main__":

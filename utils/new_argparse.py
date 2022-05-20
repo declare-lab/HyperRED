@@ -56,6 +56,12 @@ class ConfigurationParer():
 
         # embedding configurations
         group = self.parser.add_argument_group('Embedding')
+        group.add('-task',
+                  '--task',
+                  type=str,
+                  choices=["quintuplet", "tagger"],
+                  default="quintuplet",
+                  help='training task.')
         group.add('-embedding_model',
                   '--embedding_model',
                   type=str,

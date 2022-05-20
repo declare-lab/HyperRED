@@ -1,5 +1,5 @@
 import json
-from collections import Counter
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -339,50 +339,6 @@ def process(
             print(json.dumps(sent), file=fout)
 
 
-def select_top_qualifiers(path_pattern: str, path_out: str, top_k: int):
-    # Find the most common
-    labels = []
-    for path in sorted(Path().glob(path_pattern)):
-        with open(path) as f:
-            for line in f:
-                sent = Sentence(**json.loads(line))
-                for q in sent.qualifierMentions:
-                    labels.append(q.label)
-
-    counter = Counter(labels)
-    keep = [k for k, v in counter.most_common(top_k)]
-    remainder = sum(counter[k] for k in keep)
-    info = dict(
-        orig_labels=len(set(labels)), q_total=len(labels), q_unchanged=remainder
-    )
-    print(info)
-
-    with open(path_out, "w") as f:
-        f.write("\n".join(keep))
-
-
-def apply_top_qualifiers(
-    path_in: str, path_out: str, path_labels: str, dummy_label: str = "others"
-):
-    with open(path_labels) as f:
-        labels = set(f.read().split("\n"))
-        print(dict(labels=len(labels)))
-
-    sents = []
-    with open(path_in) as f:
-        for line in tqdm(f):
-            s = Sentence(**json.loads(line))
-            for q in s.qualifierMentions:
-                if q.label not in labels:
-                    q.label = dummy_label
-            sents.append(s)
-
-    print(dict(new=len(set(q.label for s in sents for q in s.qualifierMentions))))
-    with open(path_out, "w") as f:
-        for s in tqdm(sents):
-            f.write(s.json() + "\n")
-
-
 def make_label_file(pattern_in: str, path_out: str):
     sents = []
     for path in sorted(Path().glob(pattern_in)):
@@ -409,31 +365,55 @@ def make_label_file(pattern_in: str, path_out: str):
         f.write(json.dumps(info, indent=2))
 
 
-def add_extra_entities(path_in: str, path_ents: str, path_out: str):
-    text_to_ents = {}
-    with open(path_ents) as f:
-        for line in f:
-            raw = json.loads(line)
-            text = " ".join(raw["tokens"])
-            text_to_ents[text] = [tuple([start, end]) for start, end in raw["ents"]]
+def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
+    id_to_entity = {e.emId: e for e in sent.entityMentions}
+    pair_to_qualifiers = {}
+    for q in sent.qualifierMentions:
+        pair_to_qualifiers.setdefault((q.em1Id, q.em2Id), []).append(q)
 
-    with open(path_in) as f_in, open(path_out, "w") as f_out:
-        for line in tqdm(f_in.readlines()):
-            sent = Sentence(**json.loads(line))
-            ents = text_to_ents[sent.sentText]
-            label = sent.entityMentions[0].label
-            assert set(ents).issuperset([e.offset for e in sent.entityMentions])
-            tokens = sent.sentText.split()
-            sent.entityMentions = [
-                Entity(
-                    emId=str(span),
-                    offset=span,
-                    text=" ".join(tokens[span[0] : span[1]]),
-                    label=label,
-                )
-                for span in ents
-            ]
-            f_out.write(sent.json() + "\n")
+    outputs = []
+    for r in sent.relationMentions:
+        head = id_to_entity[r.em1Id]
+        tail = id_to_entity[r.em2Id]
+        parts = [sent.sentText, head.text, r.label, tail.text]
+        text = " | ".join(parts)
+        ents = []
+        for q in pair_to_qualifiers[(r.em1Id, r.em2Id)]:
+            e = id_to_entity[q.em3Id].copy(deep=True)
+            e.label = q.label
+            ents.append(e)
+
+        new = sent.copy(deep=True)
+        new.articleId = text
+        new.sentText = text
+        new.entityMentions = ents
+        new.relationMentions = []
+        new.qualifierMentions = []
+        outputs.append(new)
+
+    return outputs
+
+
+def process_tags(path_in: str, path_out: str, path_temp: str = "temp.json", **kwargs):
+    print(dict(process_tags=locals()))
+    make_sentences(path_in, path_temp)
+    with open(path_temp) as f:
+        sents = [Sentence(**json.loads(line)) for line in tqdm(f.readlines())]
+
+    with open(path_temp, "w") as f:
+        for s in tqdm(sents):
+            for new in convert_sent_to_tags(s):
+                f.write(new.json() + "\n")
+
+    process(source_file=path_temp, target_file=path_out, **kwargs)
+    os.remove(path_temp)
+
+
+def process_tags_many(folder_in: str, folder_out: str, **kwargs):
+    for path in Path(folder_in).glob("*.json"):
+        process_tags(
+            path_in=str(path), path_out=str(Path(folder_out) / path.name), **kwargs
+        )
 
 
 """
@@ -479,6 +459,21 @@ p data/q_process.py process temp/train.json data/q30/train.json data/q30/label.j
 p data/q_process.py process temp/dev.json data/q30/dev.json data/q30/label.json
 p data/q_process.py process temp/test.json data/q30/test.json data/q30/label.json
 
+################################################################################
+
+mkdir -p data/q10_tagger/
+cp data/q10/label.json data/q10_tagger/
+p data/q_process.py process_tags_many \
+--folder_in ../quintuplet/outputs/data/flat_min_10 \
+--folder_out data/q10_tagger \
+--label_file data/q10_tagger/label.json
+
+mkdir -p data/q30_tagger/
+cp data/q30/label.json data/q30_tagger/
+p data/q_process.py process_tags_many \
+--folder_in ../quintuplet/outputs/data/flat_min_30 \
+--folder_out data/q30_tagger \
+--label_file data/q30_tagger/label.json
 
 """
 
