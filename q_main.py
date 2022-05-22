@@ -420,57 +420,6 @@ def main():
 
 
 """
-Distant supervised experiment
-
-python q_main.py \
---ent_rel_file label_vocab.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---save_dir ckpt/quintuplet \
---data_dir data/quintuplet \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval --data_split test
-
-p analysis.py test_preds \
---path_pred ckpt/quintuplet/raw_test.pkl \
---path_gold data/quintuplet/test.json \
---path_vocab ckpt/quintuplet/vocabulary.pickle
-
-{                               
-  "scorer": "EntityScorer",     
-  "num_correct": 12370,         
-  "num_pred": 14330,                                            
-  "num_gold": 17127,                                            
-  "precision": 0.8632240055826936,                              
-  "recall": 0.7222514158930344,                                 
-  "f1": 0.7864704199383286                                      
-}
-{
-  "scorer": "StrictScorer",
-  "num_correct": 3639,                                  
-  "num_pred": 5199,   
-  "num_gold": 6093,
-  "precision": 0.6999422965954991,
-  "recall": 0.5972427375677006,  
-  "f1": 0.6445270988310309                              
-}
-{
-  "scorer": "QuintupletScorer",
-  "num_correct": 2000,
-  "num_pred": 3294,
-  "num_gold": 6738,
-  "precision": 0.607164541590771,
-  "recall": 0.2968239833778569,
-  "f1": 0.39872408293460926
-}
-
 ################################################################################
 Distant supervised + filtered dev/test (10)
 
@@ -495,36 +444,36 @@ p analysis.py test_preds \
 --path_gold data/q10/test.json \
 --path_vocab ckpt/q10/vocabulary.pickle
 
-{                                                                                                                               
+{  
   "scorer": "EntityScorer",
-  "num_correct": 4303,
-  "num_pred": 4837,
-  "num_gold": 6432,                                             
-  "precision": 0.8896009923506305,
-  "recall": 0.6689987562189055,
-  "f1": 0.7636879936107906
+  "num_correct": 5286,
+  "num_pred": 6019,
+  "num_gold": 6432,
+  "precision": 0.8782189732513707,
+  "recall": 0.8218283582089553,
+  "f1": 0.849088426632399
 }
-{                                                                                                                               
-  "scorer": "StrictScorer",                                                                                                     
-  "num_correct": 1671,
-  "num_pred": 2179,
+{
+  "scorer": "StrictScorer",
+  "num_correct": 1626,
+  "num_pred": 2211,
   "num_gold": 2312,
-  "precision": 0.7668655346489215,
-  "recall": 0.7227508650519031,
-  "f1": 0.7441549766199064
+  "precision": 0.7354138398914518,
+  "recall": 0.7032871972318339,
+  "f1": 0.7189918195887685
 }
 {
   "scorer": "QuintupletScorer",
-  "num_correct": 565,
-  "num_pred": 864,
+  "num_correct": 1476,
+  "num_pred": 2524,
   "num_gold": 2595,
-  "precision": 0.6539351851851852,
-  "recall": 0.21772639691714837, 
-  "f1": 0.32668401272043945
+  "precision": 0.5847860538827259,
+  "recall": 0.5687861271676301,
+  "f1": 0.5766751318616917
 }
 
 ################################################################################
-Distant supervised + filtered dev/test (10)
+Distant supervised + filtered dev/test (30)
 
 python q_main.py \
 --ent_rel_file label.json \
@@ -549,28 +498,30 @@ p analysis.py test_preds \
 
 {
   "scorer": "EntityScorer",
-  "num_correct": 3948,    
-  "num_pred": 4365,      
-  "num_gold": 5777,     
-  "recall": 0.683399688419595,
-  "f1": 0.778544665746401    
+  "num_correct": 4679,
+  "num_pred": 5188,
+  "num_gold": 5777,
+  "precision": 0.9018889745566693,
+  "recall": 0.8099359529167388,
+  "f1": 0.8534427724578204
 }
-{                                                                                                                               
-  "scorer": "StrictScorer",                                                                                                     
-  "num_correct": 1583,
-  "num_pred": 2003,
+{
+  "scorer": "StrictScorer",
+  "num_correct": 1472,
+  "num_pred": 1879,
   "num_gold": 2060,
-  "precision": 0.7903145282076884,
-  "recall": 0.7684466019417475,
-  "f1": 0.7792271720403642
-}{
+  "precision": 0.7833954230973922,
+  "recall": 0.7145631067961165,
+  "f1": 0.7473978167047473
+}
+{
   "scorer": "QuintupletScorer",
-  "num_correct": 481,
-  "num_pred": 702,
+  "num_correct": 1356,
+  "num_pred": 2150,
   "num_gold": 2302,
-  "precision": 0.6851851851851852,
-  "recall": 0.20894874022589052, 
-  "f1": 0.32023968042609857
+  "precision": 0.6306976744186047,
+  "recall": 0.5890529973935708,
+  "f1": 0.6091644204851752
 }
 
 ################################################################################

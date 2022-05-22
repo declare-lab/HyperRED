@@ -1,6 +1,7 @@
 import json
 import random
 from collections import Counter
+from pprint import pprint
 from typing import List
 
 import numpy as np
@@ -11,6 +12,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from data.q_process import Sentence, SparseCube
 from inputs.vocabulary import Vocabulary
+from models.joint_decoding.q_decoder import decode_nonzero_cuboids
 from models.joint_decoding.q_tagger import decode_nonzero_spans
 from q_predict import load_raw_preds, match_sent_preds
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
@@ -329,6 +331,20 @@ def compare_tag_data(
         decoded_spans.extend(spans)
         correct_spans.extend([sp for sp in spans if sp in gold])
     print(dict(decoded_spans=len(decoded_spans), correct_spans=len(correct_spans)))
+
+
+def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
+    with open(path) as f:
+        sents = [Sentence(**json.loads(line)) for line in tqdm(f.readlines())]
+
+    cubes = [torch.tensor(s.quintupletMatrix.numpy()) for s in tqdm(sents)]
+    for i, c in enumerate(tqdm(cubes, desc="nonzero")):
+        assert c.nonzero().shape[0] > 0
+        cuboids = decode_nonzero_cuboids(c)
+        if len(sents[i].qualifierMentions) != len(cuboids):
+            pprint(sents[i].qualifierMentions)
+            pprint(cuboids)
+            print()
 
 
 """

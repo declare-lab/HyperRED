@@ -1,4 +1,5 @@
 import logging
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -9,6 +10,47 @@ from models.embedding_models.pretrained_embedding_model import \
 from modules.token_embedders.bert_encoder import BertLinear
 
 logger = logging.getLogger(__name__)
+
+
+def check_adjacent(
+    i: int,
+    j: int,
+    k: int,
+    bounds: Tuple[int, int, int, int, int, int],
+) -> bool:
+    return (
+        (bounds[0] - 1 <= i < bounds[1] + 1)
+        and (bounds[2] - 1 <= j < bounds[3] + 1)
+        and (bounds[4] - 1 <= k < bounds[5] + 1)
+    )
+
+
+def update_bounds(
+    i: int, j: int, k: int, bounds: Tuple[int, int, int, int, int, int]
+) -> Tuple[int, int, int, int, int, int]:
+    return (
+        min(i, bounds[0]),
+        max(i + 1, bounds[1]),
+        min(j, bounds[2]),
+        max(j + 1, bounds[3]),
+        min(k, bounds[4]),
+        max(k + 1, bounds[5]),
+    )
+
+
+def decode_nonzero_cuboids(
+    x: torch.Tensor,
+) -> List[Tuple[int, int, int, int, int, int]]:
+    cuboids = []
+    for coordinates in x.nonzero():  # Assumes lexicographic sorting
+        i, j, k = map(int, coordinates)
+        for idx, bounds in enumerate(cuboids):
+            if check_adjacent(i, j, k, bounds):
+                cuboids[idx] = update_bounds(i, j, k, bounds)
+                break
+        else:
+            cuboids.append((i, i + 1, j, j + 1, k, k + 1))
+    return cuboids
 
 
 class EntRelJointDecoder(nn.Module):
@@ -184,101 +226,38 @@ class EntRelJointDecoder(nn.Module):
         rel_preds = []
         q_preds = []
 
-        batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
-        batch_normalized_q_score = batch_normalized_q_score.cpu().numpy()
-        symmetric_label = []
         ent_label = self.ent_label
         rel_label = self.rel_label
         q_label = self.q_label
 
         for idx, seq_len in enumerate(batch_seq_tokens_lens):
+            separate_position_preds.append([])
             ent_pred = {}
             rel_pred = {}
             q_pred = {}
 
             q_score = batch_normalized_q_score[idx][:seq_len, :seq_len, :seq_len, :]
             joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
-            joint_score[..., symmetric_label] = (
-                joint_score[..., symmetric_label]
-                + joint_score[..., symmetric_label].transpose((1, 0, 2))
-            ) / 2
+            cuboids = decode_nonzero_cuboids(q_score.argmax(-1))
+            for i_start, i_end, j_start, j_end, k_start, k_end in cuboids:
+                score = q_score[
+                    i_start:i_end,
+                    j_start:j_end,
+                    k_start:k_end,
+                ].mean((0, 1, 2))
+                pred = q_label[score.cpu().numpy()[q_label].argmax()].item()
+                pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
+                spans = ((i_start, i_end), (j_start, j_end), (k_start, k_end))
+                q_pred[spans] = pred_label
 
-            joint_score_feature = joint_score.reshape(seq_len, -1)
-            transposed_joint_score_feature = joint_score.transpose((1, 0, 2)).reshape(
-                seq_len, -1
-            )
-            separate_pos = (
-                (
-                    np.linalg.norm(
-                        joint_score_feature[0 : seq_len - 1]
-                        - joint_score_feature[1:seq_len],
-                        axis=1,
-                    )
-                    + np.linalg.norm(
-                        transposed_joint_score_feature[0 : seq_len - 1]
-                        - transposed_joint_score_feature[1:seq_len],
-                        axis=1,
-                    )
-                )
-                * 0.5
-                > self.separate_threshold
-            ).nonzero()[0]
-            separate_position_preds.append([pos.item() for pos in separate_pos])
-            if len(separate_pos) > 0:
-                spans = [
-                    (0, separate_pos[0].item() + 1),
-                    (separate_pos[-1].item() + 1, seq_len),
-                ] + [
-                    (separate_pos[idx].item() + 1, separate_pos[idx + 1].item() + 1)
-                    for idx in range(len(separate_pos) - 1)
-                ]
-            else:
-                spans = [(0, seq_len)]
+                score = joint_score[i_start:i_end, j_start:j_end].mean((0, 1))
+                pred = rel_label[score.cpu().numpy()[rel_label].argmax()].item()
+                pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
+                rel_pred[spans[:2]] = pred_label
 
-            ents = []
-            for span in spans:
-                score = np.mean(
-                    joint_score[span[0] : span[1], span[0] : span[1], :], axis=(0, 1)
-                )
-                if not (np.max(score[ent_label]) < score[self.none_idx]):
-                    pred = ent_label[np.argmax(score[ent_label])].item()
-                    pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                    ents.append(span)
-                    ent_pred[span] = pred_label
-
-            for ent1 in ents:
-                for ent2 in ents:
-                    if ent1 == ent2:
-                        continue
-                    score = np.mean(
-                        joint_score[ent1[0] : ent1[1], ent2[0] : ent2[1], :],
-                        axis=(0, 1),
-                    )
-                    if not (np.max(score[rel_label]) < score[self.none_idx]):
-                        pred = rel_label[np.argmax(score[rel_label])].item()
-                        pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                        rel_pred[(ent1, ent2)] = pred_label
-
-            for ent1 in ents:
-                for ent2 in ents:
-                    for ent3 in ents:
-                        if len(set([ent1, ent2, ent3])) < 3:
-                            continue
-                        score = np.mean(
-                            q_score[
-                                ent1[0] : ent1[1],
-                                ent2[0] : ent2[1],
-                                ent3[0] : ent3[1],
-                                :,
-                            ],
-                            axis=(0, 1, 2),
-                        )
-                        if not (np.max(score[q_label]) < score[self.none_idx]):
-                            pred = q_label[np.argmax(score[q_label])].item()
-                            pred_label = self.vocab.get_token_from_index(
-                                pred, "ent_rel_id"
-                            )
-                            q_pred[(ent1, ent2, ent3)] = pred_label
+                for sp in spans:
+                    pred = ent_label[0].item()
+                    ent_pred[sp] = self.vocab.get_token_from_index(pred, "ent_rel_id")
 
             ent_preds.append(ent_pred)
             rel_preds.append(rel_pred)
