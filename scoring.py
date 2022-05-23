@@ -10,11 +10,15 @@ def safe_divide(a: float, b: float) -> float:
 
 
 class Scorer:
+    name: str = ""
+
     def run(self, pred: List[Sentence], gold: List[Sentence]) -> Dict[str, float]:
         raise NotImplementedError
 
 
 class StrictScorer:
+    name: str = "strict triplet"
+
     def make_sent_tuples(
         self, s: Sentence
     ) -> List[Tuple[Tuple[int, int, str], Tuple[int, int, str], str]]:
@@ -62,11 +66,15 @@ class StrictScorer:
 
 
 class EntityScorer(StrictScorer):
+    name: str = "entity"
+
     def make_sent_tuples(self, s: Sentence) -> List[Tuple[int, int, str]]:
         return [(e.offset[0], e.offset[1], e.label) for e in s.entityMentions]
 
 
 class QuintupletScorer(StrictScorer):
+    name: str = "quintuplet"
+
     def make_sent_tuples(
         self, s: Sentence
     ) -> List[Tuple[int, int, int, int, int, int, str, str]]:

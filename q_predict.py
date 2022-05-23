@@ -1,56 +1,13 @@
 import pickle
-from typing import List
 
 from fire import Fire
 
-from data.q_process import RawPred, Sentence, process_tags
-from inputs.datasets.q_dataset import Dataset
+from data.q_process import load_raw_preds, process_tags
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.q_decoder import EntRelJointDecoder
-from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
-from q_main import evaluate
+from q_main import run_eval, score_preds
 
-
-def match_sent_preds(
-    sents: List[Sentence], raw_preds: List[RawPred], vocab: Vocabulary
-) -> List[Sentence]:
-    preds = [p.as_sentence(vocab) for p in raw_preds]
-    text_to_pred = {p.sentText.lower(): p for p in preds}
-
-    empty = RawPred.empty().as_sentence(vocab)
-    outputs = [text_to_pred.get(s.sentText.lower(), empty) for s in sents]
-
-    print("\nHow many pairs have empty preds?")
-    print(dict(num=len([p for p in outputs if p == empty])))
-    return outputs
-
-
-def run_eval(
-    path: str = "ckpt/quintuplet/best_model",
-    path_data="ckpt/quintuplet/dataset.pickle",
-    data_split: str = "dev",
-    task: str = "quintuplet",
-    path_in: str = "",
-):
-    if task == "tagger":
-        model = Tagger.load(path)
-    else:
-        model = EntRelJointDecoder.load(path)
-
-    dataset = Dataset.load(path_data)
-    cfg = model.cfg
-    evaluate(cfg, dataset, model, data_split, path_in=path_in)
-
-
-def load_raw_preds(path: str) -> List[RawPred]:
-    raw_preds = []
-    with open(path, "rb") as f:
-        raw = pickle.load(f)
-        for r in raw:
-            p = RawPred(**r)
-            p.assert_valid()
-            raw_preds.append(p)
-    return raw_preds
+assert run_eval is not None
+assert score_preds is not None
 
 
 def merge_pipeline_preds(
@@ -132,7 +89,7 @@ p q_predict.py merge_pipeline_preds \
 --path_vocab_tags ckpt/q10_tagger/vocabulary.pickle \
 --path_out ckpt/q10_tagger/pred.pkl
 
-p analysis.py test_preds \
+p q_predict.py score_preds \
 --path_pred ckpt/q10_tagger/pred.pkl \
 --path_gold data/q10/test.json \
 --path_vocab ckpt/q10_triplet/vocabulary.pickle
@@ -165,7 +122,7 @@ p q_predict.py merge_pipeline_preds \
 --path_vocab_tags ckpt/q30_tagger/vocabulary.pickle \
 --path_out ckpt/q30_tagger/pred.pkl
 
-p analysis.py test_preds \
+p q_predict.py score_preds \
 --path_pred ckpt/q30_tagger/pred.pkl \
 --path_gold data/q30/test.json \
 --path_vocab ckpt/q30_triplet/vocabulary.pickle

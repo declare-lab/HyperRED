@@ -16,7 +16,8 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from data.q_process import SparseCube
+from data.q_process import (Sentence, SparseCube, load_raw_preds,
+                            match_sent_preds)
 from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
 from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField
@@ -26,12 +27,46 @@ from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
 from models.joint_decoding.q_decoder import EntRelJointDecoder
 from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
+from scoring import EntityScorer, QuintupletScorer, StrictScorer
 from utils.eval import eval_file
 from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
 from utils.prediction_outputs import print_predictions_for_joint_decoding
 
 logger = logging.getLogger(__name__)
+
+
+def run_eval(
+    path: str = "ckpt/quintuplet/best_model",
+    path_data="ckpt/quintuplet/dataset.pickle",
+    data_split: str = "dev",
+    task: str = "quintuplet",
+    path_in: str = "",
+):
+    if task == "tagger":
+        model = Tagger.load(path)
+    else:
+        model = EntRelJointDecoder.load(path)
+
+    dataset = Dataset.load(path_data)
+    cfg = model.cfg
+    evaluate(cfg, dataset, model, data_split, path_in=path_in)
+
+
+def score_preds(path_pred: str, path_gold: str, path_vocab: str) -> dict:
+    raw_preds = load_raw_preds(path_pred)
+    vocab = Vocabulary.load(path_vocab)
+    with open(path_gold) as f:
+        sents = [Sentence(**json.loads(line)) for line in f]
+
+    print(dict(preds=len(raw_preds), sents=len(sents)))
+    preds = match_sent_preds(sents, raw_preds, vocab)
+    results = {}
+
+    for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
+        results[scorer.name] = scorer.run(preds, sents)
+    print(json.dumps(results, indent=2))
+    return results
 
 
 def prepare_inputs(batch_inputs, device):
@@ -284,17 +319,33 @@ def evaluate(
             losses.append(outputs["loss"].cpu().item())
             all_outputs.extend(process_outputs(inputs, outputs))
 
-    output_file = str(Path(cfg.save_dir) / f"{data_split}.output")
-    print_predictions_for_joint_decoding(all_outputs, output_file, dataset.vocab)
-    eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
-    joint_label_score, separate_position_score, ent_score, exact_rel_score = eval_file(
-        output_file, eval_metrics
-    )
-    score = ent_score + exact_rel_score
+    # Save raw outputs
     path = Path(cfg.save_dir) / f"raw_{data_split}.pkl"
     print(dict(path=path))
     with open(path, "wb") as f:
         pickle.dump(all_outputs, f)
+
+    if cfg.task == "quintuplet" and not path_in:
+        # TODO: refactor run_eval and score_preds and this evaluate()
+        mapping = dict(train=cfg.train_file, dev=cfg.dev_file, test=cfg.test_file)
+        results = score_preds(
+            path_pred=str(path),
+            path_gold=mapping[data_split],
+            path_vocab=cfg.vocabulary_file,
+        )
+        score = results[cfg.task]["f1"]
+    else:
+        # Legacy to support the tagger task
+        output_file = str(Path(cfg.save_dir) / f"{data_split}.output")
+        print_predictions_for_joint_decoding(all_outputs, output_file, dataset.vocab)
+        eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
+        (
+            joint_label_score,
+            separate_position_score,
+            ent_score,
+            exact_rel_score,
+        ) = eval_file(output_file, eval_metrics)
+        score = ent_score + exact_rel_score
 
     return np.mean(losses), score
 
@@ -423,7 +474,7 @@ def main():
 ################################################################################
 Distant supervised + filtered dev/test (10)
 
-python q_main.py \
+p q_main.py \
 --ent_rel_file label.json \
 --train_batch_size 16 \
 --gradient_accumulation_steps 2 \
@@ -439,37 +490,31 @@ python q_main.py \
 
 p q_predict.py run_eval ckpt/q10/best_model ckpt/q10/dataset.pickle test
 
-p analysis.py test_preds \
---path_pred ckpt/q10/raw_test.pkl \
---path_gold data/q10/test.json \
---path_vocab ckpt/q10/vocabulary.pickle
-
-{  
-  "scorer": "EntityScorer",
-  "num_correct": 5286,
-  "num_pred": 6019,
-  "num_gold": 6432,
-  "precision": 0.8782189732513707,
-  "recall": 0.8218283582089553,
-  "f1": 0.849088426632399
-}
-{
-  "scorer": "StrictScorer",
-  "num_correct": 1626,
-  "num_pred": 2211,
-  "num_gold": 2312,
-  "precision": 0.7354138398914518,
-  "recall": 0.7032871972318339,
-  "f1": 0.7189918195887685
-}
-{
-  "scorer": "QuintupletScorer",
-  "num_correct": 1476,
-  "num_pred": 2524,
-  "num_gold": 2595,
-  "precision": 0.5847860538827259,
-  "recall": 0.5687861271676301,
-  "f1": 0.5766751318616917
+{                                                                                                                            
+  "entity": {
+    "num_correct": 5229,
+    "num_pred": 5974,  
+    "num_gold": 6432,
+    "precision": 0.8752929360562437,
+    "recall": 0.8129664179104478,
+    "f1": 0.842979203611156
+  },
+  "strict triplet": {
+    "num_correct": 1626,
+    "num_pred": 2210,
+    "num_gold": 2312,
+    "precision": 0.7357466063348417,
+    "recall": 0.7032871972318339,
+    "f1": 0.7191508182220256
+  },
+  "quintuplet": {
+    "num_correct": 1477,
+    "num_pred": 2514,
+    "num_gold": 2595,
+    "precision": 0.5875099443118537,
+    "recall": 0.5691714836223507,
+    "f1": 0.5781953415541202
+  }
 }
 
 ################################################################################
@@ -491,37 +536,31 @@ python q_main.py \
 
 p q_predict.py run_eval ckpt/q30/best_model ckpt/q30/dataset.pickle test
 
-p analysis.py test_preds \
---path_pred ckpt/q30/raw_test.pkl \
---path_gold data/q30/test.json \
---path_vocab ckpt/q30/vocabulary.pickle
-
-{
-  "scorer": "EntityScorer",
-  "num_correct": 4679,
-  "num_pred": 5188,
-  "num_gold": 5777,
-  "precision": 0.9018889745566693,
-  "recall": 0.8099359529167388,
-  "f1": 0.8534427724578204
-}
-{
-  "scorer": "StrictScorer",
-  "num_correct": 1472,
-  "num_pred": 1879,
-  "num_gold": 2060,
-  "precision": 0.7833954230973922,
-  "recall": 0.7145631067961165,
-  "f1": 0.7473978167047473
-}
-{
-  "scorer": "QuintupletScorer",
-  "num_correct": 1356,
-  "num_pred": 2150,
-  "num_gold": 2302,
-  "precision": 0.6306976744186047,
-  "recall": 0.5890529973935708,
-  "f1": 0.6091644204851752
+{                      
+  "entity": {           
+    "num_correct": 4741, 
+    "num_pred": 5249,
+    "num_gold": 5777,
+    "precision": 0.9032196608877882,
+    "recall": 0.8206681668686169,
+    "f1": 0.8599673499002357
+  },
+  "strict triplet": {
+    "num_correct": 1505,
+    "num_pred": 1890,
+    "num_gold": 2060,
+    "precision": 0.7962962962962963,
+    "recall": 0.7305825242718447,
+    "f1": 0.7620253164556962
+  },
+  "quintuplet": {
+    "num_correct": 1390,
+    "num_pred": 2169,
+    "num_gold": 2302,
+    "precision": 0.640848317196865,
+    "recall": 0.6038227628149435,
+    "f1": 0.6217848356072467
+  }
 }
 
 ################################################################################

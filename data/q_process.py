@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -136,7 +137,7 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     @classmethod
     def empty(cls):
         return cls(
-            tokens=np.empty(shape=(1,)),
+            tokens=np.array([0]),
             span2ent={},
             span2rel={},
             seq_len=0,
@@ -429,6 +430,31 @@ def process_tags_many(folder_in: str, folder_out: str, **kwargs):
         process_tags(
             path_in=str(path), path_out=str(Path(folder_out) / path.name), **kwargs
         )
+
+
+def match_sent_preds(
+    sents: List[Sentence], raw_preds: List[RawPred], vocab
+) -> List[Sentence]:
+    preds = [p.as_sentence(vocab) for p in raw_preds]
+    text_to_pred = {p.sentText.lower(): p for p in preds}
+
+    empty = RawPred.empty().as_sentence(vocab)
+    outputs = [text_to_pred.get(s.sentText.lower(), empty) for s in sents]
+
+    print("\nHow many pairs have empty preds?")
+    print(dict(num=len([p for p in outputs if p == empty])))
+    return outputs
+
+
+def load_raw_preds(path: str) -> List[RawPred]:
+    raw_preds = []
+    with open(path, "rb") as f:
+        raw = pickle.load(f)
+        for r in raw:
+            p = RawPred(**r)
+            p.assert_valid()
+            raw_preds.append(p)
+    return raw_preds
 
 
 """

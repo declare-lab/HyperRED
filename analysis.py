@@ -8,14 +8,13 @@ import numpy as np
 import torch
 from fire import Fire
 from tqdm import tqdm
+from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import Sentence, SparseCube
-from inputs.vocabulary import Vocabulary
+from data.q_process import Sentence, SparseCube, load_raw_preds
+from inputs.datasets.q_dataset import Dataset
 from models.joint_decoding.q_decoder import decode_nonzero_cuboids
 from models.joint_decoding.q_tagger import decode_nonzero_spans
-from q_predict import load_raw_preds, match_sent_preds
-from scoring import EntityScorer, QuintupletScorer, StrictScorer
 
 
 def test_lengths(
@@ -118,34 +117,6 @@ def test_data(path: str = "data/ACE2005/test.json"):
 
     print("\nHow many have span overlap?")
     print(len([s for s in sents if s.check_span_overlap()]))
-
-
-def test_preds(
-    path_pred: str = "ckpt/ace2005_bert/pred.pkl",
-    path_gold: str = "data/ACE2005/test.json",
-    path_vocab: str = "ckpt/ace2005_bert/vocabulary.pickle",
-):
-    raw_preds = load_raw_preds(path_pred)
-    vocab = Vocabulary.load(path_vocab)
-    for p in raw_preds:
-        if p.has_relations():
-            for k, v in p.dict().items():
-                print(k, str(v)[:80])
-            tokens = [vocab.get_token_from_index(i, "tokens") for i in p.tokens]
-            print(dict(tokens=tokens))
-            break
-
-    print(dict(preds=len(raw_preds)))
-    print("\nHow many preds have seq_len==0?")
-    print(dict(num=len([p for p in raw_preds if p.seq_len == 0])))
-    with open(path_gold) as f:
-        sents = [Sentence(**json.loads(line)) for line in f]
-
-    preds = match_sent_preds(sents, raw_preds, vocab)
-    for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
-        results = scorer.run(preds, sents)
-        results = dict(scorer=type(scorer).__name__, **results)
-        print(json.dumps(results, indent=2))
 
 
 def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
@@ -347,6 +318,21 @@ def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
             print()
 
 
+def test_roberta(path: str = "ckpt/q30r/dataset.pickle"):
+    device = torch.device("cuda")
+    ds = Dataset.load(path)
+    bs = 1
+    model = AutoModel.from_pretrained("roberta-base")
+    model = model.to(device)
+
+    for epoch, batch in ds.get_batch("train", bs, None):
+        x = torch.tensor(batch["wordpiece_tokens"], device=device)
+        print(dict(min=x.min(), max=x.max()))
+        outputs = model(x)
+        print(dict(epoch=epoch, **{k: v.shape for k, v in outputs.items()}))
+        break
+
+
 """
 Roberta experiments
 
@@ -391,30 +377,14 @@ p q_main.py \
 --pretrain_epochs 0 \
 --device 0
 
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name bert-base-uncased \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---save_dir ckpt/q30b \
---data_dir data/q30 \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
 Findings
 - FP16 doesn't significantly change speed or results
 
 Tasks
-- implement 2nd stage tagger
-- debug quintuplet decoding
+- q_main.py model selection by quintuplet f1
 - debug roberta
+- position embeddings
+- pruning / cuboid dropout?
 
 """
 
