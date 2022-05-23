@@ -68,6 +68,10 @@ class PretrainedEncoder(nn.Module):
         else:
             self.dropout = lambda x: x
 
+        self.pad_id = self.pretrained_model.config.pad_token_id
+        self.model_type = self.pretrained_model.config.model_type
+        logger.info(str(dict(pad_id=self.pad_id, model_type=self.model_type)))
+
     def get_output_dims(self):
         return self.output_size
 
@@ -84,7 +88,9 @@ class PretrainedEncoder(nn.Module):
 
         if token_type_inputs is None:
             token_type_inputs = torch.zeros_like(seq_inputs)
-        mask_inputs = (seq_inputs != 0).long()
+        if self.model_type == "roberta":
+            token_type_inputs = None
+        mask_inputs = (seq_inputs != self.pad_id).long()
 
         outputs = self.pretrained_model(
             input_ids=seq_inputs,
