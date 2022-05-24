@@ -580,7 +580,6 @@ p q_main.py \
 --pretrain_epochs 0 \
 --device 0
 
-################################################################################
 Tagger task (30)
 
 p q_main.py \
@@ -589,6 +588,41 @@ p q_main.py \
 --train_batch_size 32 \
 --config_file config.yml \
 --save_dir ckpt/q30_tagger \
+--data_dir data/q30_tagger \
+--fine_tune \
+--max_sent_len 90 \
+--max_wordpiece_len 90 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+################################################################################
+Tagger DistilBERT (10)
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--task tagger \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q10_tagger_distilbert \
+--data_dir data/q10_tagger \
+--fine_tune \
+--max_sent_len 90 \
+--max_wordpiece_len 90 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+Tagger DistilBERT (30)
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--task tagger \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q30_tagger_distilbert \
 --data_dir data/q30_tagger \
 --fine_tune \
 --max_sent_len 90 \

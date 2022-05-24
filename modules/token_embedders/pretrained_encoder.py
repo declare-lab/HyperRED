@@ -92,13 +92,21 @@ class PretrainedEncoder(nn.Module):
             token_type_inputs = None
         mask_inputs = (seq_inputs != self.pad_id).long()
 
-        outputs = self.pretrained_model(
-            input_ids=seq_inputs,
-            token_type_ids=token_type_inputs,
-            attention_mask=mask_inputs,
-        )
-        last_hidden_state = outputs[0]
-        pooled_output = outputs[1]
+        if self.model_type == "distilbert":
+            outputs = self.pretrained_model(
+                input_ids=seq_inputs,
+                attention_mask=mask_inputs,
+            )
+            last_hidden_state = outputs[0]
+            pooled_output = outputs[0].mean(dim=1)  # distilbert has no pooled output
+        else:
+            outputs = self.pretrained_model(
+                input_ids=seq_inputs,
+                token_type_ids=token_type_inputs,
+                attention_mask=mask_inputs,
+            )
+            last_hidden_state = outputs[0]
+            pooled_output = outputs[1]
 
         return self.dropout(self.mlp(last_hidden_state)), self.dropout(
             self.mlp(pooled_output)

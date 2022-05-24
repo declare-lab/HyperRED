@@ -475,6 +475,8 @@ p analysis.py test_preds \
   "f1": 0.6397674213725663
 }
 
+################################################################################
+
 python main.py \
 --ent_rel_file label.json \
 --config_file config.yml \
@@ -528,6 +530,36 @@ p analysis.py test_preds \
   "recall": 0.7771844660194175,
   "f1": 0.784227283859907
 }
+
+################################################################################
+
+p main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q10_triplet_distilbert \
+--data_dir data/q10 \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--ent_rel_file label.json \
+--config_file config.yml \
+--save_dir ckpt/q30_triplet_distilbert \
+--data_dir data/q30 \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
 
 """
 

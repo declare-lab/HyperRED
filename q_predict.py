@@ -1,4 +1,6 @@
+import os
 import pickle
+from pathlib import Path
 
 from fire import Fire
 
@@ -70,29 +72,39 @@ def prepare_tagger_pred_inputs(
     process_tags(path_in="", path_out=path_out, path_sents_in=path_temp, **kwargs)
 
 
+def eval_pipeline(
+    dir_triplets: str, dir_tags: str, dir_data: str, path_temp: str = "temp2.json"
+):
+    prepare_tagger_pred_inputs(
+        path_triplets=str(Path(dir_triplets) / "pred.pkl"),
+        path_vocab=str(Path(dir_triplets) / "vocabulary.pickle"),
+        path_out=path_temp,
+        label_file=str(Path(dir_data) / "label.json"),
+    )
+    run_eval(
+        path=str(Path(dir_tags) / "best_model"),
+        path_data=str(Path(dir_tags) / "dataset.pickle"),
+        data_split="dummy",
+        task="tagger",
+        path_in=path_temp,
+    )
+    os.remove(path_temp)
+    merge_pipeline_preds(
+        path_triplets=str(Path(dir_triplets) / "pred.pkl"),
+        path_tags=str(Path(dir_tags) / "raw_pred.pkl"),
+        path_vocab_triplets=str(Path(dir_triplets) / "vocabulary.pickle"),
+        path_vocab_tags=str(Path(dir_tags) / "vocabulary.pickle"),
+        path_out=str(Path(dir_tags) / "pred.pkl"),
+    )
+    score_preds(
+        path_pred=str(Path(dir_tags) / "pred.pkl"),
+        path_gold=str(Path(dir_data) / "test.json"),
+        path_vocab=str(Path(dir_triplets) / "vocabulary.pickle"),
+    )
+
+
 """
-p q_predict.py prepare_tagger_pred_inputs \
---path_triplets ckpt/q10_triplet/pred.pkl \
---path_vocab ckpt/q10_triplet/vocabulary.pickle \
---path_out ckpt/q10_triplet/tagger_in.json \
---label_file data/q10/label.json
-
-p q_predict.py run_eval ckpt/q10_tagger/best_model ckpt/q10_tagger/dataset.pickle \
---data_split dummy \
---task tagger \
---path_in ckpt/q10_triplet/tagger_in.json
-
-p q_predict.py merge_pipeline_preds \
---path_triplets ckpt/q10_triplet/pred.pkl \
---path_tags ckpt/q10_tagger/raw_pred.pkl \
---path_vocab_triplets ckpt/q10_triplet/vocabulary.pickle \
---path_vocab_tags ckpt/q10_tagger/vocabulary.pickle \
---path_out ckpt/q10_tagger/pred.pkl
-
-p q_predict.py score_preds \
---path_pred ckpt/q10_tagger/pred.pkl \
---path_gold data/q10/test.json \
---path_vocab ckpt/q10_triplet/vocabulary.pickle
+p q_predict.py eval_pipeline ckpt/q10_triplet/ ckpt/q10_tagger/ data/q10/
 
 {
   "scorer": "QuintupletScorer",
@@ -104,28 +116,7 @@ p q_predict.py score_preds \
   "f1": 0.68360814742968
 }
 
-p q_predict.py prepare_tagger_pred_inputs \
---path_triplets ckpt/q30_triplet/pred.pkl \
---path_vocab ckpt/q30_triplet/vocabulary.pickle \
---path_out ckpt/q30_triplet/tagger_in.json \
---label_file data/q30/label.json
-
-p q_predict.py run_eval ckpt/q30_tagger/best_model ckpt/q30_tagger/dataset.pickle \
---data_split dummy \
---task tagger \
---path_in ckpt/q30_triplet/tagger_in.json
-
-p q_predict.py merge_pipeline_preds \
---path_triplets ckpt/q30_triplet/pred.pkl \
---path_tags ckpt/q30_tagger/raw_pred.pkl \
---path_vocab_triplets ckpt/q30_triplet/vocabulary.pickle \
---path_vocab_tags ckpt/q30_tagger/vocabulary.pickle \
---path_out ckpt/q30_tagger/pred.pkl
-
-p q_predict.py score_preds \
---path_pred ckpt/q30_tagger/pred.pkl \
---path_gold data/q30/test.json \
---path_vocab ckpt/q30_triplet/vocabulary.pickle
+p q_predict.py eval_pipeline ckpt/q30_triplet/ ckpt/q30_tagger/ data/q30/
 
 {
   "scorer": "QuintupletScorer",
@@ -135,6 +126,30 @@ p q_predict.py score_preds \
   "precision": 0.721868365180467,
   "recall": 0.738488271068636,
   "f1": 0.7300837449001503
+}
+
+################################################################################
+
+p q_predict.py eval_pipeline ckpt/q10_triplet_distilbert/ ckpt/q10_tagger_distilbert/ data/q10/
+
+"quintuplet": {
+  "num_correct": 1607,
+  "num_pred": 2315,
+  "num_gold": 2595,
+  "precision": 0.6941684665226782,
+  "recall": 0.6192678227360309,
+  "f1": 0.654582484725051
+}
+
+p q_predict.py eval_pipeline ckpt/q30_triplet_distilbert/ ckpt/q30_tagger_distilbert/ data/q30/
+
+"quintuplet": {
+  "num_correct": 1586,
+  "num_pred": 2270,
+  "num_gold": 2302,
+  "precision": 0.6986784140969163,
+  "recall": 0.6889661164205039,
+  "f1": 0.6937882764654418
 }
 
 """
