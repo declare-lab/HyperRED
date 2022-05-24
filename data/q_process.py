@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -268,6 +269,9 @@ def add_tokens(sent, tokenizer):
     sep = tokenizer.sep_token
     wordpiece_tokens = [cls]
     wordpiece_tokens.append(sep)
+    is_roberta = "roberta" in type(tokenizer).__name__.lower()
+    if is_roberta:
+        wordpiece_tokens.pop()  # RoBERTa format is [cls, tokens, sep, pad]
 
     context_len = len(wordpiece_tokens)
     wordpiece_segment_ids = [0] * context_len
@@ -275,6 +279,8 @@ def add_tokens(sent, tokenizer):
     wordpiece_tokens_index = []
     cur_index = len(wordpiece_tokens)
     for token in sent["sentText"].split(" "):
+        if is_roberta:
+            token = " " + token  # RoBERTa is space-sensitive
         tokenized_token = list(tokenizer.tokenize(token))
         wordpiece_tokens.extend(tokenized_token)
         wordpiece_tokens_index.append([cur_index, cur_index + len(tokenized_token)])
@@ -331,6 +337,7 @@ def process(
     label_file: str = "data/quintuplet/label_vocab.json",
     pretrained_model: str = "bert-base-uncased",
 ):
+    print(dict(process=locals()))
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     print("Load {} tokenizer successfully.".format(pretrained_model))
 
@@ -457,6 +464,18 @@ def load_raw_preds(path: str) -> List[RawPred]:
     return raw_preds
 
 
+def process_many(dir_in: str, dir_out: str, dir_temp: str = "temp", **kwargs):
+    if Path(dir_temp).exists():
+        shutil.rmtree(dir_temp)
+    for path in sorted(Path(dir_in).glob("*.json")):
+        make_sentences(str(path), str(Path(dir_temp) / path.name))
+
+    path_label = str(Path(dir_out) / "label.json")
+    make_label_file("temp/*.json", path_label)
+    for path in sorted(Path(dir_temp).glob("*.json")):
+        process(str(path), str(Path(dir_out) / path.name), path_label, **kwargs)
+
+
 """
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
@@ -500,6 +519,7 @@ p data/q_process.py process temp/train.json data/q30/train.json data/q30/label.j
 p data/q_process.py process temp/dev.json data/q30/dev.json data/q30/label.json
 p data/q_process.py process temp/test.json data/q30/test.json data/q30/label.json
 
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_copy/
 ################################################################################
 
 mkdir -p data/q10_tagger/
