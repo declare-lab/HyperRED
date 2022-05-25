@@ -1,5 +1,6 @@
 temp/
 data/*/*.json
+data/*/*/*.json
 pyrightconfig.json
 tags
 json/
