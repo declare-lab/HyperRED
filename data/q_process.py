@@ -477,50 +477,8 @@ def process_many(dir_in: str, dir_out: str, dir_temp: str = "temp", **kwargs):
 
 
 """
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/train.json temp/train.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/dev.json temp/dev.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat/test.json temp/test.json
-
-p data/q_process.py select_top_qualifiers "temp/*.json" temp/labels.txt --top_k 50
-p data/q_process.py apply_top_qualifiers temp/train.json temp/train.json temp/labels.txt
-p data/q_process.py apply_top_qualifiers temp/dev.json temp/dev.json temp/labels.txt
-p data/q_process.py apply_top_qualifiers temp/test.json temp/test.json temp/labels.txt
-p data/q_process.py make_label_file "temp/*.json" data/quintuplet/label_vocab.json
-
-p data/q_process.py add_extra_entities \
---path_in temp/train.json \
---path_ents ../quintuplet/outputs/data/match_trex/sent_entities.jsonl \
---path_out temp/train_extra_ents.json
-
-p data/q_process.py process temp/train_extra_ents.json data/quintuplet/train_extra_ents.json
-p data/q_process.py process temp/train.json data/quintuplet/train.json
-p data/q_process.py process temp/dev.json data/quintuplet/dev.json
-p data/q_process.py process temp/test.json data/quintuplet/test.json
-
-################################################################################
-
-rm -rf temp
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/train.json temp/train.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/dev.json temp/dev.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/test.json temp/test.json
-p data/q_process.py make_label_file "temp/*.json" data/q10/label.json
-
-p data/q_process.py process temp/train.json data/q10/train.json data/q10/label.json
-p data/q_process.py process temp/dev.json data/q10/dev.json data/q10/label.json
-p data/q_process.py process temp/test.json data/q10/test.json data/q10/label.json
-
-rm -rf temp
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/train.json temp/train.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/dev.json temp/dev.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/test.json temp/test.json
-p data/q_process.py make_label_file "temp/*.json" data/q30/label.json
-
-p data/q_process.py process temp/train.json data/q30/train.json data/q30/label.json
-p data/q_process.py process temp/dev.json data/q30/dev.json data/q30/label.json
-p data/q_process.py process temp/test.json data/q30/test.json data/q30/label.json
-
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_copy/
-################################################################################
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
 
 mkdir -p data/q10_tagger/
 cp data/q10/label.json data/q10_tagger/
