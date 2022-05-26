@@ -466,8 +466,10 @@ def main():
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
-    ace_dataset.save(str(Path(cfg.save_dir) / "dataset.pickle"))
+    path_data = str(Path(cfg.save_dir) / "dataset.pickle")
+    ace_dataset.save(path_data)
     train(cfg, ace_dataset, model)
+    run_eval(path=cfg.best_model_path, path_data=path_data, data_split="test")
 
 
 """
@@ -595,6 +597,28 @@ p q_predict.py run_eval ckpt/q10r_fix_q_loss/best_model ckpt/q10r_fix_q_loss/dat
 "precision": 0.6610435464888191,
 "recall": 0.649325626204239,
 "f1": 0.6551321928460342
+
+p q_main.py \
+--save_dir ckpt/q10r_pair2_fix_q_loss \
+--data_dir data/q10r \
+--use_pair2_mlp \
+--fix_q_loss \
+--embedding_model pretrained \
+--pretrained_model_name roberta-base \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.6828675577156743,
+"recall": 0.6497109826589595,
+"f1": 0.6658767772511849
 
 ################################################################################
 Tagger task (10)
