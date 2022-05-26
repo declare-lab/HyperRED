@@ -108,6 +108,18 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "--fix_q_loss",
+            "--fix_q_loss",
+            action="store_true",
+            help="fix_q_loss",
+        )
+        group.add(
+            "--use_pair2_mlp",
+            "--use_pair2_mlp",
+            action="store_true",
+            help="use_pair2_mlp",
+        )
+        group.add(
             "-task",
             "--task",
             type=str,

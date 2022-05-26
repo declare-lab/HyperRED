@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import List, Tuple
 
@@ -74,6 +75,7 @@ class EntRelJointDecoder(nn.Module):
         self.activation = nn.GELU()
         self.device = cfg.device
         self.separate_threshold = cfg.separate_threshold
+        print(json.dumps(vars(self.cfg), indent=2))
 
         if cfg.embedding_model == "bert":
             self.embedding_model = BertEmbedModel(cfg, vocab)
@@ -100,6 +102,14 @@ class EntRelJointDecoder(nn.Module):
             activation=self.activation,
             dropout=cfg.dropout,
         )
+
+        if self.get_config("use_pair2_mlp"):
+            self.pair2_mlp = BertLinear(
+                input_size=(self.encoder_output_size) * 2,
+                output_size=cfg.mlp_hidden_size,
+                activation=self.activation,
+                dropout=cfg.dropout,
+            )
 
         self.final_mlp = BertLinear(
             input_size=cfg.mlp_hidden_size,
@@ -136,6 +146,9 @@ class EntRelJointDecoder(nn.Module):
         self.element_loss = nn.CrossEntropyLoss()
         self.quintuplet_loss = nn.CrossEntropyLoss()
 
+    def get_config(self, key: str):
+        return getattr(self.cfg, key, None)
+
     def forward(self, batch_inputs):
         """forward
 
@@ -160,6 +173,10 @@ class EntRelJointDecoder(nn.Module):
         pair = self.pair_mlp(pair)
         batch_joint_score = self.final_mlp(pair)
 
+        if self.get_config("use_pair2_mlp"):
+            # Don't share representations with table/triplets
+            pair = self.pair2_mlp(torch.cat([head, tail], dim=-1))
+
         value = self.value_mlp(batch_seq_tokens_encoder_repr)
         q_score = torch.einsum("bxyi, oij, bzj -> bxyzo", pair, self.U, value)
         mask = batch_inputs["quintuplet_matrix_mask"]
@@ -167,6 +184,13 @@ class EntRelJointDecoder(nn.Module):
         q_loss = self.quintuplet_loss(
             q_score.softmax(-1)[mask], batch_inputs["quintuplet_matrix"][mask]
         )
+
+        if self.get_config("fix_q_loss"):
+            # Don't softmax before crossentropy and add logit dropout
+            q_loss = self.quintuplet_loss(
+                self.logit_dropout(q_score[mask]),
+                batch_inputs["quintuplet_matrix"][mask],
+            )
 
         results = {}
         if not self.training:

@@ -489,44 +489,18 @@ p q_main.py \
 --device 0
 
 p q_predict.py run_eval ckpt/q10/best_model ckpt/q10/dataset.pickle test
+"precision": 0.6122448979591837,
+"recall": 0.5549132947976878,
+"f1": 0.5821710127349908
 
-{                                                                                                                            
-  "entity": {
-    "num_correct": 5229,
-    "num_pred": 5974,  
-    "num_gold": 6432,
-    "precision": 0.8752929360562437,
-    "recall": 0.8129664179104478,
-    "f1": 0.842979203611156
-  },
-  "strict triplet": {
-    "num_correct": 1626,
-    "num_pred": 2210,
-    "num_gold": 2312,
-    "precision": 0.7357466063348417,
-    "recall": 0.7032871972318339,
-    "f1": 0.7191508182220256
-  },
-  "quintuplet": {
-    "num_correct": 1477,
-    "num_pred": 2514,
-    "num_gold": 2595,
-    "precision": 0.5875099443118537,
-    "recall": 0.5691714836223507,
-    "f1": 0.5781953415541202
-  }
-}
-
-################################################################################
-Distant supervised + filtered dev/test (30)
-
-python q_main.py \
+p q_main.py \
+--save_dir ckpt/q10_pair2_mlp \
+--data_dir data/q10 \
+--use_pair2_mlp \
 --ent_rel_file label.json \
 --train_batch_size 16 \
 --gradient_accumulation_steps 2 \
 --config_file config.yml \
---save_dir ckpt/q30 \
---data_dir data/q30 \
 --fine_tune \
 --max_sent_len 80 \
 --max_wordpiece_len 80 \
@@ -534,34 +508,93 @@ python q_main.py \
 --pretrain_epochs 0 \
 --device 0
 
-p q_predict.py run_eval ckpt/q30/best_model ckpt/q30/dataset.pickle test
+p q_predict.py run_eval ckpt/q10_pair2_mlp/best_model ckpt/q10_pair2_mlp/dataset.pickle test
+"precision": 0.0,
+"recall": 0.0,
+"f1": 0.0
 
-{                      
-  "entity": {           
-    "num_correct": 4741, 
-    "num_pred": 5249,
-    "num_gold": 5777,
-    "precision": 0.9032196608877882,
-    "recall": 0.8206681668686169,
-    "f1": 0.8599673499002357
-  },
-  "strict triplet": {
-    "num_correct": 1505,
-    "num_pred": 1890,
-    "num_gold": 2060,
-    "precision": 0.7962962962962963,
-    "recall": 0.7305825242718447,
-    "f1": 0.7620253164556962
-  },
-  "quintuplet": {
-    "num_correct": 1390,
-    "num_pred": 2169,
-    "num_gold": 2302,
-    "precision": 0.640848317196865,
-    "recall": 0.6038227628149435,
-    "f1": 0.6217848356072467
-  }
-}
+p q_main.py \
+--save_dir ckpt/q10_fix_q_loss \
+--data_dir data/q10 \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q10_fix_q_loss/best_model ckpt/q10_fix_q_loss/dataset.pickle test
+"precision": 0.6400613967766692,
+"recall": 0.6427745664739885,
+"f1": 0.6414151124783696
+
+p q_main.py \
+--save_dir ckpt/q10_fix_q_loss_copy \
+--data_dir data/q10 \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q10_fix_q_loss_copy/best_model ckpt/q10_fix_q_loss_copy/dataset.pickle test
+"precision": 0.6391437308868502, 
+"recall": 0.644315992292871,
+"f1": 0.6417194396469008
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss \
+--data_dir data/q10 \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q10_pair2_fix_q_loss/best_model ckpt/q10_pair2_fix_q_loss/dataset.pickle test
+"precision": 0.6777910210568137,
+"recall": 0.6574181117533718,
+"f1": 0.6674491392801253
+
+p q_main.py \
+--save_dir ckpt/q10r_fix_q_loss \
+--data_dir data/q10r \
+--fix_q_loss \
+--embedding_model pretrained \
+--pretrained_model_name roberta-base \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+p q_predict.py run_eval ckpt/q10r_fix_q_loss/best_model ckpt/q10r_fix_q_loss/dataset.pickle test
+"precision": 0.6610435464888191,
+"recall": 0.649325626204239,
+"f1": 0.6551321928460342
 
 ################################################################################
 Tagger task (10)
@@ -573,57 +606,6 @@ p q_main.py \
 --config_file config.yml \
 --save_dir ckpt/q10_tagger \
 --data_dir data/q10_tagger \
---fine_tune \
---max_sent_len 90 \
---max_wordpiece_len 90 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-Tagger task (30)
-
-p q_main.py \
---task tagger \
---ent_rel_file label.json \
---train_batch_size 32 \
---config_file config.yml \
---save_dir ckpt/q30_tagger \
---data_dir data/q30_tagger \
---fine_tune \
---max_sent_len 90 \
---max_wordpiece_len 90 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-################################################################################
-Tagger DistilBERT (10)
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name distilbert-base-uncased \
---task tagger \
---ent_rel_file label.json \
---config_file config.yml \
---save_dir ckpt/q10_tagger_distilbert \
---data_dir data/q10_tagger \
---fine_tune \
---max_sent_len 90 \
---max_wordpiece_len 90 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-Tagger DistilBERT (30)
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name distilbert-base-uncased \
---task tagger \
---ent_rel_file label.json \
---config_file config.yml \
---save_dir ckpt/q30_tagger_distilbert \
---data_dir data/q30_tagger \
 --fine_tune \
 --max_sent_len 90 \
 --max_wordpiece_len 90 \

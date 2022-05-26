@@ -318,150 +318,56 @@ def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
             print()
 
 
-def test_roberta(path: str = "ckpt/q30r/dataset.pickle"):
+def test_roberta(
+    path: str = "ckpt/q10r_fix_q_loss/dataset.pickle", name: str = "roberta-base"
+):
     device = torch.device("cpu")
     # device = torch.device("cuda")
     ds = Dataset.load(path)
     bs = 2
-    model = AutoModel.from_pretrained("roberta-base")
+    model = AutoModel.from_pretrained(name)
+    tok = AutoTokenizer.from_pretrained(name)
     model = model.to(device)
 
     for epoch, batch in ds.get_batch("train", bs, None):
         a = torch.tensor(batch["wordpiece_tokens"], device=device)
         b = torch.tensor(batch["wordpiece_segment_ids"], device=device)
+        print(dict(a=a.shape, b=b.shape))
         mask = (a != 0).long()
         outputs = model(input_ids=a, attention_mask=mask)
         # outputs = model(input_ids=a, token_type_ids=b, attention_mask=mask)
         print(dict(epoch=epoch, **{k: v.shape for k, v in outputs.items()}))
-        breakpoint()
+
+        for lst in tok.batch_decode(a):
+            print(lst)
+        break
+
+
+def compare_sents(
+    path_a: str = "data/q10/dev.json", path_b: str = "data/q10_copy/dev.json"
+):
+    with open(path_a) as f:
+        sents_a = [Sentence(**json.loads(line)) for line in f]
+    with open(path_b) as f:
+        sents_b = [Sentence(**json.loads(line)) for line in f]
+
+    assert len(sents_a) == len(sents_b)
+    for a, b in zip(sents_a, sents_b):
+        assert a == b
 
 
 """
-Roberta experiments
-
-################################################################################
-Roberta q10 and q30
- 
-rm -rf temp
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/train.json temp/train.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/dev.json temp/dev.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/test.json temp/test.json
-p data/q_process.py make_label_file "temp/*.json" data/q10r/label.json
-
-p data/q_process.py process temp/train.json data/q10r/train.json data/q10r/label.json roberta-base
-p data/q_process.py process temp/dev.json data/q10r/dev.json data/q10r/label.json roberta-base
-p data/q_process.py process temp/test.json data/q10r/test.json data/q10r/label.json roberta-base
-
-rm -rf temp
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/train.json temp/train.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/dev.json temp/dev.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_30/test.json temp/test.json
-p data/q_process.py make_label_file "temp/*.json" data/q30r/label.json
-
-p data/q_process.py process temp/train.json data/q30r/train.json data/q30r/label.json roberta-base
-p data/q_process.py process temp/dev.json data/q30r/dev.json data/q30r/label.json roberta-base
-p data/q_process.py process temp/test.json data/q30r/test.json data/q30r/label.json roberta-base
-
-################################################################################
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---save_dir ckpt/q10r \
---data_dir data/q10r \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10r/best_model ckpt/q10r/dataset.pickle test
-
-{
-  "entity": { 
-    "num_correct": 4798,
-    "num_pred": 5303,  
-    "num_gold": 6432,
-    "precision": 0.9047708844050537,
-    "recall": 0.7459577114427861,
-    "f1": 0.8177247550063912
-  },
-  "strict triplet": {
-    "num_correct": 1477,
-    "num_pred": 1897,
-    "num_gold": 2312,
-    "precision": 0.7785977859778598,
-    "recall": 0.638840830449827,
-    "f1": 0.7018294131622713
-  },
-  "quintuplet": {
-    "num_correct": 1316,
-    "num_pred": 2120,
-    "num_gold": 2595,
-    "precision": 0.620754716981132,
-    "recall": 0.5071290944123314,
-    "f1": 0.558218451749735
-  }
-}
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---save_dir ckpt/q30r \
---data_dir data/q30r \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q30r/best_model ckpt/q30r/dataset.pickle test
-
-{                                                           
-  "entity": {
-    "num_correct": 4469,
-    "num_pred": 4925,
-    "num_gold": 5777,
-    "precision": 0.9074111675126904,                        
-    "recall": 0.7735849056603774,                           
-    "f1": 0.8351709960754999
-  },                   
-  "strict triplet": { 
-    "num_correct": 1354,
-    "num_pred": 1715,                                       
-    "num_gold": 2060,       
-    "precision": 0.7895043731778426,                        
-    "recall": 0.6572815533980583,
-    "f1": 0.7173509933774834                                
-  },                                                        
-  "quintuplet": {
-    "num_correct": 1235,   
-    "num_pred": 1956,
-    "num_gold": 2302,
-    "precision": 0.6313905930470347,
-    "recall": 0.5364900086880973,
-    "f1": 0.5800845467355565
-  }
-}
-
 Findings
 - FP16 doesn't significantly change speed or results
+- RoBERTa is better than BERT (+1 F1) 
+- Removing softmax before crossentropy helps (+6 F1)
+- Separate MLP for triplet and quintuplet helps (+2 F1)
 
 Tasks
-- debug roberta
-- use distil-bert/roberta for pipeline?
-- position embeddings
 - pruning / cuboid dropout?
+- auxiliary entity seq labeling loss
+- position embeddings
+- initial labeled train split and training
 
 """
 

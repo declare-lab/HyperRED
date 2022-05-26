@@ -479,6 +479,7 @@ def process_many(dir_in: str, dir_out: str, dir_temp: str = "temp", **kwargs):
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10r/ --pretrained_model roberta-base
 
 mkdir -p data/q10_tagger/
 cp data/q10/label.json data/q10_tagger/
