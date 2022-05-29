@@ -111,6 +111,14 @@ class EntRelJointDecoder(nn.Module):
                 dropout=cfg.dropout,
             )
 
+        if self.get_config("use_entity_loss"):
+            self.entity_mlp = BertLinear(
+                input_size=self.embedding_model.get_hidden_size(),
+                output_size=ent_rel_file["q_num_logits"],
+                activation=nn.Identity(),
+                dropout=0.0,
+            )
+
         self.final_mlp = BertLinear(
             input_size=cfg.mlp_hidden_size,
             output_size=self.vocab.get_vocab_size("ent_rel_id"),
@@ -226,6 +234,19 @@ class EntRelJointDecoder(nn.Module):
         results["loss"] = results["element_loss"] + results["q_loss"]
         results["joint_score"] = batch_joint_score
         results["q_score"] = q_score
+
+        if self.get_config("use_entity_loss"):
+            entity_score = self.entity_mlp(batch_seq_tokens_encoder_repr)
+            entity_mask = batch_inputs["joint_label_matrix_mask"].diagonal(
+                dim1=1, dim2=2
+            )
+            entity_labels = batch_inputs["joint_label_matrix"].diagonal(dim1=1, dim2=2)
+            results["entity_loss"] = self.element_loss(
+                self.logit_dropout(entity_score[entity_mask]),
+                entity_labels[entity_mask],
+            )
+            results["loss"] += results["entity_loss"]
+
         return results
 
     def soft_joint_decoding(

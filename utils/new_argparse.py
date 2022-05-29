@@ -108,6 +108,12 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "--use_entity_loss",
+            "--use_entity_loss",
+            action="store_true",
+            help="use_entity_loss",
+        )
+        group.add(
             "--fix_q_loss",
             "--fix_q_loss",
             action="store_true",
