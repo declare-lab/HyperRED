@@ -108,6 +108,13 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "-prune_topk",
+            "--prune_topk",
+            type=int,
+            default=0,
+            help="prune_topk",
+        )
+        group.add(
             "--use_entity_loss",
             "--use_entity_loss",
             action="store_true",

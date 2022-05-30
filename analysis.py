@@ -13,8 +13,10 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from data.q_process import Sentence, SparseCube, load_raw_preds
 from inputs.datasets.q_dataset import Dataset
-from models.joint_decoding.q_decoder import decode_nonzero_cuboids
+from models.joint_decoding.q_decoder import (EntRelJointDecoder,
+                                             decode_nonzero_cuboids)
 from models.joint_decoding.q_tagger import decode_nonzero_spans
+from q_main import evaluate
 
 
 def test_lengths(
@@ -152,10 +154,13 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print("\nWhat fraction of the diagonals (entities) are empty?")
     total = 0
     filled = 0
+    lengths = []
     for s in sents:
         row = list(np.diagonal(np.array(s.jointLabelMatrix)))
         total += len(row)
         filled += sum(row)
+        lengths.append(sum(row))
+    print(dict(min=min(lengths), avg=np.mean(lengths), max=max(lengths)))
     print(1 - (filled / total))
 
     print("\nWhat is the average sentence length?")
@@ -354,6 +359,42 @@ def compare_sents(
     assert len(sents_a) == len(sents_b)
     for a, b in zip(sents_a, sents_b):
         assert a == b
+
+
+def test_top_k():
+    bs = 3
+    seq_len = 4
+    k = 2
+    x = torch.rand(bs, seq_len)
+    t = x.topk(k=k, dim=-1)
+    print(x)
+    print(t.indices)
+    # breakpoint()
+
+
+def test_gpu(bs: int = 64, seq_len: int = 512, name: str = "bert-base-uncased"):
+    device = torch.device("cuda")
+    model = AutoModel.from_pretrained(name).to(device)
+    for _ in tqdm(range(int(1e9))):
+        x = torch.zeros(bs, seq_len, dtype=torch.long, device=device)
+        y = model(x)
+        assert y is not None
+
+
+def test_prune_eval(
+    path: str = "ckpt/quintuplet/best_model",
+    path_data="ckpt/quintuplet/dataset.pickle",
+    data_split: str = "dev",
+    task: str = "quintuplet",
+    path_in: str = "",
+):
+    model = EntRelJointDecoder.load(path)
+    model.prune_topk = 20
+    # model.prune_topk = 80
+
+    dataset = Dataset.load(path_data)
+    cfg = model.cfg
+    evaluate(cfg, dataset, model, data_split, path_in=path_in)
 
 
 """

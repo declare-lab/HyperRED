@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -9,6 +9,7 @@ from models.embedding_models.bert_embedding_model import BertEmbedModel
 from models.embedding_models.pretrained_embedding_model import \
     PretrainedEmbedModel
 from modules.token_embedders.bert_encoder import BertLinear
+from utils.nn_utils import batched_index_select
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,30 @@ def decode_nonzero_cuboids(
         else:
             cuboids.append((i, i + 1, j, j + 1, k, k + 1))
     return cuboids
+
+
+def prune_matrix(x: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
+    assert x.ndim == 4
+    assert indices.ndim == 2
+    bs, topk = indices.shape
+    assert x.shape[0] == bs
+    samples = []
+    for i in range(bs):
+        y = x[i]
+        y = y[indices[i], :, :]
+        y = y[:, indices[i], :]
+        y = y[:, :, indices[i]]
+        assert y.shape == (topk, topk, topk)
+        samples.append(y)
+
+    # x = batched_index_select(x, indices)
+    # x = batched_index_select(x.permute(0, 3, 1, 2), indices)
+    # x = batched_index_select(x.permute(0, 3, 1, 2), indices)
+    # x = x.permute(0, 3, 1, 2)
+    # assert x.shape == (bs, topk, topk, topk)
+    # return x
+
+    return torch.stack(samples, dim=0)
 
 
 class EntRelJointDecoder(nn.Module):
@@ -153,6 +178,7 @@ class EntRelJointDecoder(nn.Module):
         self.q_label = np.array(self.ent_rel_file["qualifier"])
         self.element_loss = nn.CrossEntropyLoss()
         self.quintuplet_loss = nn.CrossEntropyLoss()
+        self.prune_topk = self.get_config("prune_topk") or 0
 
     def get_config(self, key: str):
         return getattr(self.cfg, key, None)
@@ -180,6 +206,26 @@ class EntRelJointDecoder(nn.Module):
         pair = torch.cat([head, tail], dim=-1)
         pair = self.pair_mlp(pair)
         batch_joint_score = self.final_mlp(pair)
+
+        if self.prune_topk > 0:
+            topk = min(seq_len, self.prune_topk)
+            assert self.get_config("use_pair2_mlp")
+            seq_mask = batch_inputs["joint_label_matrix_mask"].diagonal(dim1=1, dim2=2)
+            seq_score = batch_joint_score.diagonal(dim1=1, dim2=2).permute(0, 2, 1)
+            seq_score = seq_score[:, :, list(self.ent_label)].max(dim=-1).values
+            assert seq_mask.shape == seq_score.shape
+            seq_score = torch.where(seq_mask, seq_score, seq_score.min())
+            bs, _ = seq_score.shape
+            indices = seq_score.topk(k=topk, dim=1).indices
+            assert indices.shape == (bs, topk)
+            pruned = batched_index_select(batch_seq_tokens_encoder_repr, indices)
+            head = pruned.unsqueeze(dim=2).expand(-1, -1, topk, -1)
+            tail = pruned.unsqueeze(dim=1).expand(-1, topk, -1, -1)
+            batch_seq_tokens_encoder_repr = pruned
+            for k in ["quintuplet_matrix_mask", "quintuplet_matrix"]:
+                batch_inputs[k] = prune_matrix(batch_inputs[k], indices)
+        else:
+            indices = None
 
         if self.get_config("use_pair2_mlp"):
             # Don't share representations with table/triplets
@@ -221,6 +267,7 @@ class EntRelJointDecoder(nn.Module):
                 batch_normalized_joint_score,
                 batch_seq_tokens_lens,
                 batch_normalized_q_score,
+                prune_indices=indices,
             )
             results.update(decode_preds)
 
@@ -254,6 +301,7 @@ class EntRelJointDecoder(nn.Module):
         batch_normalized_joint_score,
         batch_seq_tokens_lens,
         batch_normalized_q_score,
+        prune_indices: Optional[torch.Tensor],
     ) -> dict:
         """soft_joint_decoding extracts entity and relation at the same time,
         and consider the interconnection of entity and relation.
@@ -281,7 +329,26 @@ class EntRelJointDecoder(nn.Module):
             rel_pred = {}
             q_pred = {}
 
-            q_score = batch_normalized_q_score[idx][:seq_len, :seq_len, :seq_len, :]
+            if prune_indices is not None:
+                indices = [i for i in prune_indices[idx].tolist() if i < seq_len]
+                pairs = [(i, j) for i, j in enumerate(indices)]
+                topk, _, _, num_logits = batch_normalized_q_score[idx].shape
+                d = batch_normalized_joint_score.device
+                temp = torch.full((seq_len, topk, topk, num_logits), -1e9, device=d)
+                for i, j in pairs:
+                    temp[j, :, :] = batch_normalized_q_score[idx][i, :, :]
+                temp2 = torch.full((seq_len, seq_len, topk, num_logits), -1e9, device=d)
+                for i, j in pairs:
+                    temp2[:, j, :] = temp[:, i, :]
+                temp3 = torch.full(
+                    (seq_len, seq_len, seq_len, num_logits), -1e9, device=d
+                )
+                for i, j in pairs:
+                    temp3[:, :, j] = temp2[:, :, i]
+                q_score = temp3
+            else:
+                q_score = batch_normalized_q_score[idx][:seq_len, :seq_len, :seq_len, :]
+
             joint_score = batch_normalized_joint_score[idx][:seq_len, :seq_len, :]
             cuboids = decode_nonzero_cuboids(q_score.argmax(-1))
             for i_start, i_end, j_start, j_end, k_start, k_end in cuboids:

@@ -641,6 +641,27 @@ p q_main.py \
 "recall": 0.6223506743737958,
 "f1": 0.6263331394221447
 
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
+--data_dir data/q10 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.6824644549763034,
+"recall": 0.6658959537572254,
+"f1": 0.6740784084259801
+
 ################################################################################
 Tagger task (10)
 
