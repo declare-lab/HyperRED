@@ -108,6 +108,13 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "-load_weight_path",
+            "--load_weight_path",
+            type=str,
+            default="",
+            help="load_weight_path",
+        )
+        group.add(
             "-prune_topk",
             "--prune_topk",
             type=int,

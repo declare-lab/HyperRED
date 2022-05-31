@@ -3,7 +3,7 @@ import pickle
 import random
 from typing import Dict, List
 
-import torch
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +145,8 @@ class Dataset:
         entries = [dataset["quintuplet_entries"][i] for i in sorted_ids]
         lengths = [dataset["quintuplet_shape"][i][0] for i in sorted_ids]
         size = max(lengths)
-        matrix = torch.zeros(len(sorted_ids), size, size, size, dtype=torch.long)
-        mask = torch.zeros_like(matrix)
+        matrix = np.zeros((len(sorted_ids), size, size, size))
+        mask = np.zeros((len(sorted_ids), size, size, size))
 
         for index, lst in enumerate(entries):
             for i, j, k, value in lst:

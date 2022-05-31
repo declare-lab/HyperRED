@@ -70,54 +70,19 @@ def score_preds(path_pred: str, path_gold: str, path_vocab: str) -> dict:
 
 
 def prepare_inputs(batch_inputs, device):
-    batch_inputs["tokens"] = torch.LongTensor(batch_inputs["tokens"])
-    batch_inputs["joint_label_matrix"] = torch.LongTensor(
-        batch_inputs["joint_label_matrix"]
-    )
-    batch_inputs["joint_label_matrix_mask"] = torch.BoolTensor(
-        batch_inputs["joint_label_matrix_mask"]
-    )
-    batch_inputs["quintuplet_matrix"] = torch.LongTensor(
-        batch_inputs["quintuplet_matrix"]
-    )
-    batch_inputs["quintuplet_matrix_mask"] = torch.BoolTensor(
-        batch_inputs["quintuplet_matrix_mask"]
-    )
-    batch_inputs["wordpiece_tokens"] = torch.LongTensor(
-        batch_inputs["wordpiece_tokens"]
-    )
-    batch_inputs["wordpiece_tokens_index"] = torch.LongTensor(
-        batch_inputs["wordpiece_tokens_index"]
-    )
-    batch_inputs["wordpiece_segment_ids"] = torch.LongTensor(
-        batch_inputs["wordpiece_segment_ids"]
-    )
-
-    if device > -1:
-        batch_inputs["tokens"] = batch_inputs["tokens"].cuda(
-            device=device, non_blocking=True
-        )
-        batch_inputs["joint_label_matrix"] = batch_inputs["joint_label_matrix"].cuda(
-            device=device, non_blocking=True
-        )
-        batch_inputs["joint_label_matrix_mask"] = batch_inputs[
-            "joint_label_matrix_mask"
-        ].cuda(device=device, non_blocking=True)
-        batch_inputs["quintuplet_matrix"] = batch_inputs["quintuplet_matrix"].cuda(
-            device=device, non_blocking=True
-        )
-        batch_inputs["quintuplet_matrix_mask"] = batch_inputs[
-            "quintuplet_matrix_mask"
-        ].cuda(device=device, non_blocking=True)
-        batch_inputs["wordpiece_tokens"] = batch_inputs["wordpiece_tokens"].cuda(
-            device=device, non_blocking=True
-        )
-        batch_inputs["wordpiece_tokens_index"] = batch_inputs[
-            "wordpiece_tokens_index"
-        ].cuda(device=device, non_blocking=True)
-        batch_inputs["wordpiece_segment_ids"] = batch_inputs[
-            "wordpiece_segment_ids"
-        ].cuda(device=device, non_blocking=True)
+    for k, v in batch_inputs.items():
+        device_id = device if device > -1 else None
+        if k in ["joint_label_matrix_mask", "quintuplet_matrix_mask"]:
+            batch_inputs[k] = torch.tensor(v, dtype=torch.bool, device=device_id)
+        if k in [
+            "tokens",
+            "joint_label_matrix",
+            "quintuplet_matrix",
+            "wordpiece_tokens",
+            "wordpiece_tokens_index",
+            "wordpiece_segment_ids",
+        ]:
+            batch_inputs[k] = torch.tensor(v, dtype=torch.long, device=device_id)
 
     return batch_inputs
 
@@ -466,6 +431,11 @@ def main():
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
+    if cfg.load_weight_path:
+        model.load_state_dict(
+            EntRelJointDecoder.load(cfg.load_weight_path).state_dict()
+        )
+
     path_data = str(Path(cfg.save_dir) / "dataset.pickle")
     ace_dataset.save(path_data)
     train(cfg, ace_dataset, model)
@@ -534,26 +504,6 @@ p q_predict.py run_eval ckpt/q10_fix_q_loss/best_model ckpt/q10_fix_q_loss/datas
 "precision": 0.6400613967766692,
 "recall": 0.6427745664739885,
 "f1": 0.6414151124783696
-
-p q_main.py \
---save_dir ckpt/q10_fix_q_loss_copy \
---data_dir data/q10 \
---fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10_fix_q_loss_copy/best_model ckpt/q10_fix_q_loss_copy/dataset.pickle test
-"precision": 0.6391437308868502, 
-"recall": 0.644315992292871,
-"f1": 0.6417194396469008
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss \
@@ -661,6 +611,109 @@ p q_main.py \
 "precision": 0.6824644549763034,
 "recall": 0.6658959537572254,
 "f1": 0.6740784084259801
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_10 \
+--data_dir data/q10 \
+--prune_topk 10 \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.676923076923077,
+"recall": 0.644315992292871,
+"f1": 0.6602171767028628
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_30 \
+--data_dir data/q10 \
+--prune_topk 30 \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.6838474025974026,    
+"recall": 0.649325626204239,
+"f1": 0.6661395532713976
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_40 \
+--data_dir data/q10 \
+--prune_topk 40 \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.6639312231340367,    
+"recall": 0.6547206165703275,
+"f1": 0.6592937524253007
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_labeled_train \
+--data_dir data/q10_labeled_train \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.5278350515463918,                                                                                                                          "recall": 0.42244224422442245,                                                                                                                        
+"f1": 0.4692942254812099
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_labeled_train_transfer \
+--data_dir data/q10_labeled_train \
+--load_weight_path ckpt/q10_pair2_fix_q_loss/best_model \
+--use_pair2_mlp \
+--fix_q_loss \
+--ent_rel_file label.json \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
+--config_file config.yml \
+--fine_tune \
+--max_sent_len 80 \
+--max_wordpiece_len 80 \
+--epochs 30 \
+--pretrain_epochs 0 \
+--device 0
+
+"precision": 0.7130730050933786,
+"recall": 0.693069306930693,
+"f1": 0.702928870292887
 
 ################################################################################
 Tagger task (10)

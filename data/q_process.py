@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import random
 import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -412,7 +413,7 @@ def process_tags(
     path_out: str,
     path_temp: str = "temp.json",
     path_sents_in: str = "",
-    **kwargs
+    **kwargs,
 ):
     print(dict(process_tags=locals()))
     if path_sents_in:
@@ -476,10 +477,38 @@ def process_many(dir_in: str, dir_out: str, dir_temp: str = "temp", **kwargs):
         process(str(path), str(Path(dir_out) / path.name), path_label, **kwargs)
 
 
+def make_labeled_train_split(dir_in: str, dir_out: str, num_train: int, seed: int = 0):
+    """Partition the existing dev/test into labeled train/dev/test"""
+    if Path(dir_out).exists():
+        shutil.rmtree(dir_out)
+    shutil.copytree(dir_in, dir_out)
+    with open(Path(dir_in) / "dev.json") as f:
+        dev = [Sentence(**json.loads(line)) for line in f]
+    with open(Path(dir_in) / "test.json") as f:
+        test = [Sentence(**json.loads(line)) for line in f]
+
+    random.seed(0)
+    total = len(dev) + len(test)
+    indices_dev = random.sample(range(len(dev)), k=num_train // 2)
+    indices_test = random.sample(range(len(test)), k=num_train // 2)
+    train = [dev[i] for i in indices_dev] + [test[i] for i in indices_test]
+    dev = [x for i, x in enumerate(dev) if i not in indices_dev]
+    test = [x for i, x in enumerate(test) if i not in indices_test]
+    assert len(train) + len(dev) + len(test) == total
+
+    for key, sents in dict(train=train, dev=dev, test=test).items():
+        print(dict(key=key, sents=len(sents)))
+        path = Path(dir_out) / f"{key}.json"
+        with open(path, "w") as f:
+            for s in sents:
+                f.write(s.json() + "\n")
+
+
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10r/ --pretrained_model roberta-base
+p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
 
 mkdir -p data/q10_tagger/
 cp data/q10/label.json data/q10_tagger/

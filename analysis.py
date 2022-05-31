@@ -372,12 +372,15 @@ def test_top_k():
     # breakpoint()
 
 
-def test_gpu(bs: int = 64, seq_len: int = 512, name: str = "bert-base-uncased"):
+def test_transformer(bs: int = 64, seq_len: int = 512, name: str = "bert-base-uncased"):
     device = torch.device("cuda")
     model = AutoModel.from_pretrained(name).to(device)
+    import time
+
     for _ in tqdm(range(int(1e9))):
         x = torch.zeros(bs, seq_len, dtype=torch.long, device=device)
         y = model(x)
+        time.sleep(0.1)
         assert y is not None
 
 
@@ -397,18 +400,42 @@ def test_prune_eval(
     evaluate(cfg, dataset, model, data_split, path_in=path_in)
 
 
+def test_loader(path: str = "ckpt/q10/dataset.pickle"):
+    ds = Dataset.load(path)
+    bs = 32
+    limit = 1000
+    for i, _ in enumerate(tqdm(ds.get_batch("train", bs, None), total=limit)):
+        print(_.keys())
+        if i > limit:
+            break
+
+
+def test_tensor():
+    bs = 32
+    size = 80
+    limit = 1000
+    shape = (bs, size, size, size)
+    zero = torch.zeros(*shape)
+
+    for _ in tqdm(range(limit)):
+        # x = torch.zeros(*shape)
+        x = torch.zeros_like(zero)
+        # x = np.zeros(shape)
+        assert x.shape == zero.shape
+
+
 """
 Findings
 - FP16 doesn't significantly change speed or results
 - RoBERTa is better than BERT (+1 F1) 
 - Removing softmax before crossentropy helps (+6 F1)
 - Separate MLP for triplet and quintuplet helps (+2 F1)
+- Auxiliary entity seq labeling loss doesn't help (-4 F1)
+- Distant training then labeled continue train helps (+3 F1)
 
 Tasks
 - pruning / cuboid dropout?
-- auxiliary entity seq labeling loss
 - position embeddings
-- initial labeled train split and training
 
 """
 
