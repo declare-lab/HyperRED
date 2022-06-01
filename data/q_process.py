@@ -119,7 +119,6 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     tokens: np.ndarray
     span2ent: Dict[Span, str]
     span2rel: Dict[Tuple[Span, Span], int]
-    seq_len: int
     joint_label_matrix: np.ndarray
     joint_label_preds: np.ndarray
     quintuplet_preds: SparseCube = SparseCube.empty()
@@ -139,10 +138,9 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     @classmethod
     def empty(cls):
         return cls(
-            tokens=np.array([0]),
+            tokens=np.array([]),
             span2ent={},
             span2rel={},
-            seq_len=0,
             joint_label_matrix=np.empty(shape=(1,)),
             joint_label_preds=np.empty(shape=(1,)),
             separate_positions=[],
@@ -152,7 +150,7 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
         )
 
     def check_if_empty(self):
-        return self.seq_len == 0
+        return len(self.tokens) == 0
 
     def has_relations(self) -> bool:
         return len(self.all_rel_preds.keys()) > 0

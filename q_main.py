@@ -222,29 +222,29 @@ def process_outputs(
     batch_inputs: Dict[str, Tensor], batch_outputs: Dict[str, Tensor]
 ) -> List[dict]:
     all_outputs = []
-    for sent_idx in range(len(batch_inputs["tokens_lens"])):
-        sent_output = dict()
-        sent_output["tokens"] = batch_inputs["tokens"][sent_idx].cpu().numpy()
-        sent_output["span2ent"] = batch_inputs["span2ent"][sent_idx]
-        sent_output["span2rel"] = batch_inputs["span2rel"][sent_idx]
-        sent_output["seq_len"] = batch_inputs["tokens_lens"][sent_idx]
-        sent_output["joint_label_matrix"] = (
-            batch_inputs["joint_label_matrix"][sent_idx].cpu().numpy()
-        )
-        sent_output["joint_label_preds"] = (
-            batch_outputs["joint_label_preds"][sent_idx].cpu().numpy()
-        )
-        sent_output["quintuplet_preds"] = SparseCube.from_numpy(
-            batch_outputs["quintuplet_preds"][sent_idx].cpu().numpy()
-        ).dict()
-        sent_output["separate_positions"] = batch_inputs["separate_positions"][sent_idx]
-        sent_output["all_separate_position_preds"] = batch_outputs[
-            "all_separate_position_preds"
-        ][sent_idx]
-        sent_output["all_ent_preds"] = batch_outputs["all_ent_preds"][sent_idx]
-        sent_output["all_rel_preds"] = batch_outputs["all_rel_preds"][sent_idx]
-        sent_output["all_q_preds"] = batch_outputs["all_q_preds"][sent_idx]
-        all_outputs.append(sent_output)
+    for i in range(len(batch_inputs["tokens_lens"])):
+        output = dict()
+        for k in set(batch_inputs.keys()).union(batch_outputs.keys()):
+            v = batch_inputs.get(k)
+            if v is None:
+                v = batch_outputs[k]
+
+            if k in ["quintuplet_preds"]:
+                output[k] = SparseCube.from_numpy(v[i].cpu().numpy()).dict()
+            if k in ["tokens", "joint_label_matrix", "joint_label_preds"]:
+                output[k] = v[i].cpu().numpy()
+            if k in [
+                "span2ent",
+                "span2rel",
+                "seq_len",
+                "separate_positions",
+                "all_separate_position_preds",
+                "all_ent_preds",
+                "all_rel_preds",
+                "all_q_preds",
+            ]:
+                output[k] = v[i]
+        all_outputs.append(output)
     return all_outputs
 
 
