@@ -25,6 +25,8 @@ class EntRelJointDecoder(nn.Module):
         """
 
         super().__init__()
+        self.cfg = cfg
+        self.ent_rel_file = ent_rel_file
         self.vocab = vocab
         self.max_span_length = cfg.max_span_length
         self.activation = nn.GELU()
@@ -50,7 +52,7 @@ class EntRelJointDecoder(nn.Module):
             dropout=cfg.dropout,
         )
 
-        self.U = nn.Parameter(
+        self.U = nn.parameter.Parameter(
             torch.FloatTensor(
                 self.vocab.get_vocab_size("ent_rel_id"),
                 cfg.mlp_hidden_size + 1,
@@ -140,6 +142,7 @@ class EntRelJointDecoder(nn.Module):
             results["all_separate_position_preds"] = separate_position_preds
             results["all_ent_preds"] = ent_preds
             results["all_rel_preds"] = rel_preds
+            results["loss"] = torch.tensor(0)
 
             return results
 
@@ -185,6 +188,11 @@ class EntRelJointDecoder(nn.Module):
             .mean()
         )
 
+        results["loss"] = (
+            1.0 * results["element_loss"]
+            + 1.0 * results["implication_loss"]
+            + 1.0 * results["symmetric_loss"]
+        )
         return results
 
     def hard_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
@@ -246,8 +254,8 @@ class EntRelJointDecoder(nn.Module):
                             pred_cnt[joint_pred[i][j]] += 1
                     pred = int(rel_label[np.argmax(pred_cnt[rel_label])])
                     pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                    h = ents[idx1][1] - ents[idx1][0]
-                    w = ents[idx2][1] - ents[idx2][0]
+                    # h = ents[idx1][1] - ents[idx1][0]
+                    # w = ents[idx2][1] - ents[idx2][0]
                     if pred_label == "None":
                         continue
                     rel_pred[(ents[idx1], ents[idx2])] = pred_label
@@ -347,3 +355,27 @@ class EntRelJointDecoder(nn.Module):
             rel_preds.append(rel_pred)
 
         return separate_position_preds, ent_preds, rel_preds
+
+    def save(self, path: str):
+        device = self.device
+        info = dict(
+            state_dict=self.cpu().state_dict(),
+            cfg=self.cfg,
+            vocab=self.vocab,
+            ent_rel_file=self.ent_rel_file,
+        )
+        torch.save(info, path)
+        self.to(device)
+        print(dict(save=path))
+
+    @classmethod
+    def load(cls, path):
+        print(dict(load=path))
+        info = torch.load(path)
+        state_dict = info.pop("state_dict")
+        model = cls(**info)
+        model.load_state_dict(state_dict)
+        if model.cfg.device > -1:
+            model.cuda(device=model.cfg.device)
+            print(dict(cuda=model.cfg.device))
+        return model

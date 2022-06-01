@@ -143,7 +143,7 @@ class ConfigurationParer:
             "-task",
             "--task",
             type=str,
-            choices=["quintuplet", "tagger"],
+            choices=["quintuplet", "tagger", "triplet"],
             default="quintuplet",
             help="training task.",
         )

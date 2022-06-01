@@ -25,15 +25,25 @@ from inputs.fields.raw_token_field import RawTokenField
 from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
+from models.joint_decoding.joint_decoder import \
+    EntRelJointDecoder as TripletModel
 from models.joint_decoding.q_decoder import EntRelJointDecoder
 from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
-from utils.eval import eval_file
 from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
-from utils.prediction_outputs import print_predictions_for_joint_decoding
 
 logger = logging.getLogger(__name__)
+
+
+def load_model(task: str, path: str = "", **kwargs):
+    model_class = dict(
+        quintuplet=EntRelJointDecoder, tagger=Tagger, triplet=TripletModel
+    )[task]
+    if path:
+        return model_class.load(path)
+    else:
+        return model_class(**kwargs)
 
 
 def run_eval(
@@ -43,11 +53,7 @@ def run_eval(
     task: str = "quintuplet",
     path_in: str = "",
 ):
-    if task == "tagger":
-        model = Tagger.load(path)
-    else:
-        model = EntRelJointDecoder.load(path)
-
+    model = load_model(task, path)
     dataset = Dataset.load(path_data)
     cfg = model.cfg
     evaluate(cfg, dataset, model, data_split, path_in=path_in)
@@ -290,28 +296,18 @@ def evaluate(
     with open(path, "wb") as f:
         pickle.dump(all_outputs, f)
 
-    if cfg.task == "quintuplet" and not path_in:
-        # TODO: refactor run_eval and score_preds and this evaluate()
-        mapping = dict(train=cfg.train_file, dev=cfg.dev_file, test=cfg.test_file)
-        results = score_preds(
-            path_pred=str(path),
-            path_gold=mapping[data_split],
-            path_vocab=cfg.vocabulary_file,
-        )
-        score = results[cfg.task]["f1"]
-    else:
-        # Legacy to support the tagger task
-        output_file = str(Path(cfg.save_dir) / f"{data_split}.output")
-        print_predictions_for_joint_decoding(all_outputs, output_file, dataset.vocab)
-        eval_metrics = ["joint-label", "separate-position", "ent", "exact-rel"]
-        (
-            joint_label_score,
-            separate_position_score,
-            ent_score,
-            exact_rel_score,
-        ) = eval_file(output_file, eval_metrics)
-        score = ent_score + exact_rel_score
+    mapping = dict(train=cfg.train_file, dev=cfg.dev_file, test=cfg.test_file)
+    results = score_preds(
+        path_pred=str(path),
+        path_gold=path_in or mapping[data_split],
+        path_vocab=cfg.vocabulary_file,
+    )
 
+    score = dict(
+        quintuplet=results["quintuplet"]["f1"],
+        triplet=results["entity"]["f1"] + results["strict triplet"]["f1"],
+        tagger=results["entity"]["f1"],
+    )[cfg.task]
     return np.mean(losses), score
 
 
@@ -424,10 +420,7 @@ def main():
         vocab.save(cfg.vocabulary_file)
 
     # joint model
-    model = EntRelJointDecoder(cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
-    logger.info(str(dict(task=cfg.task)))
-    if cfg.task == "tagger":
-        model = Tagger(cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
+    model = load_model(cfg.task, cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
@@ -439,7 +432,9 @@ def main():
     path_data = str(Path(cfg.save_dir) / "dataset.pickle")
     ace_dataset.save(path_data)
     train(cfg, ace_dataset, model)
-    run_eval(path=cfg.best_model_path, path_data=path_data, data_split="test")
+    run_eval(
+        path=cfg.best_model_path, path_data=path_data, data_split="test", task=cfg.task
+    )
 
 
 """
@@ -539,6 +534,19 @@ p q_main.py \
 "precision": 0.696078431372549,
 "recall": 0.7029702970297029,
 "f1": 0.6995073891625616
+
+################################################################################
+Triplet task (10)
+
+p q_main.py \
+--save_dir ckpt/q10_triplet \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+"precision": 0.7585431654676259,
+"recall": 0.7296712802768166,
+"f1": 0.7438271604938272
 
 ################################################################################
 Tagger task (10)
