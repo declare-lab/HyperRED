@@ -4,9 +4,9 @@ data_dir: data/ACE2005/
 train_file: train.json
 dev_file: dev.json
 test_file: test.json
-ent_rel_file: ent_rel_file.json
-max_sent_len: 512
-max_wordpiece_len: 512
+ent_rel_file: label.json
+max_sent_len: 80
+max_wordpiece_len: 80
 
 embedding_model: bert
 mlp_hidden_size: 150
@@ -18,6 +18,7 @@ bert_output_size: 0
 bert_dropout: 0.0
 separate_threshold: 1.4
 
+fine_tune: true
 gradient_clipping: 5.0
 learning_rate: 5e-5
 bert_learning_rate: 5e-5
@@ -29,7 +30,7 @@ adam_weight_decay_rate: 1e-5
 adam_bert_weight_decay_rate: 1e-5
 
 seed: 5216
-epochs: 100
+epochs: 30
 pretrain_epochs: 0
 warmup_rate: 0.2
 early_stop: 30
@@ -38,5 +39,5 @@ test_batch_size: 32
 gradient_accumulation_steps: 1
 logging_steps: 32
 validate_every: 20000
-device: -1
+device: 0
 log_file: train.log

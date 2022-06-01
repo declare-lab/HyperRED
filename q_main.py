@@ -447,170 +447,16 @@ def main():
 Distant supervised + filtered dev/test (10)
 
 p q_main.py \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---save_dir ckpt/q10 \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_0 \
 --data_dir data/q10 \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10/best_model ckpt/q10/dataset.pickle test
-"precision": 0.6122448979591837,
-"recall": 0.5549132947976878,
-"f1": 0.5821710127349908
-
-p q_main.py \
---save_dir ckpt/q10_pair2_mlp \
---data_dir data/q10 \
---use_pair2_mlp \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10_pair2_mlp/best_model ckpt/q10_pair2_mlp/dataset.pickle test
-"precision": 0.0,
-"recall": 0.0,
-"f1": 0.0
-
-p q_main.py \
---save_dir ckpt/q10_fix_q_loss \
---data_dir data/q10 \
---fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10_fix_q_loss/best_model ckpt/q10_fix_q_loss/dataset.pickle test
-"precision": 0.6400613967766692,
-"recall": 0.6427745664739885,
-"f1": 0.6414151124783696
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss \
---data_dir data/q10 \
+--prune_topk 0 \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
 
-p q_predict.py run_eval ckpt/q10_pair2_fix_q_loss/best_model ckpt/q10_pair2_fix_q_loss/dataset.pickle test
-"precision": 0.6777910210568137,
-"recall": 0.6574181117533718,
-"f1": 0.6674491392801253
-
-p q_main.py \
---save_dir ckpt/q10r_fix_q_loss \
---data_dir data/q10r \
---fix_q_loss \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-p q_predict.py run_eval ckpt/q10r_fix_q_loss/best_model ckpt/q10r_fix_q_loss/dataset.pickle test
-"precision": 0.6610435464888191,
-"recall": 0.649325626204239,
-"f1": 0.6551321928460342
-
-p q_main.py \
---save_dir ckpt/q10r_pair2_fix_q_loss \
---data_dir data/q10r \
---use_pair2_mlp \
---fix_q_loss \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-"precision": 0.6828675577156743,
-"recall": 0.6497109826589595,
-"f1": 0.6658767772511849
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_entity_loss \
---data_dir data/q10 \
---use_entity_loss \
---use_pair2_mlp \
---fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-"precision": 0.6303669008587042,
-"recall": 0.6223506743737958,
-"f1": 0.6263331394221447
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
---data_dir data/q10 \
---prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-"precision": 0.6824644549763034,
-"recall": 0.6658959537572254,
-"f1": 0.6740784084259801
+"precision": 0.6625742574257426,                                         
+"recall": 0.6447013487475916,                                            
+"f1": 0.653515625
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_10 \
@@ -618,20 +464,22 @@ p q_main.py \
 --prune_topk 10 \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
+                                                                                                                       
+"precision": 0.6751721344673957,                                                                                                                          "recall": 0.6423892100192679,                                                                                                                         
+"f1": 0.6583728278041073
 
-"precision": 0.676923076923077,
-"recall": 0.644315992292871,
-"f1": 0.6602171767028628
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
+--data_dir data/q10 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6719291490180979,
+"recall": 0.6724470134874759,
+"f1": 0.6721879815100154
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_30 \
@@ -639,20 +487,11 @@ p q_main.py \
 --prune_topk 30 \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
 
-"precision": 0.6838474025974026,    
-"recall": 0.649325626204239,
-"f1": 0.6661395532713976
+"precision": 0.6750499001996008,
+"recall": 0.6516377649325626,  
+"f1": 0.6631372549019608
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_40 \
@@ -660,39 +499,34 @@ p q_main.py \
 --prune_topk 40 \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
-
-"precision": 0.6639312231340367,    
-"recall": 0.6547206165703275,
-"f1": 0.6592937524253007
+--config_file q_config.yml
+                                                                                                                      
+"precision": 0.6715686274509803,
+"recall": 0.6335260115606937,     
+"f1": 0.6519928613920285
 
 p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_labeled_train \
---data_dir data/q10_labeled_train \
+--save_dir ckpt/q10_pair2_fix_q_loss \
+--data_dir data/q10 \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
 
-"precision": 0.5278350515463918,                                                                                                                          "recall": 0.42244224422442245,                                                                                                                        
-"f1": 0.4692942254812099
+"precision": 0.6717373899119295,                                                                                                                          "recall": 0.6466281310211947,                                                                                                                         
+"f1": 0.6589436481445121
+
+p q_main.py \
+--save_dir ckpt/q10r_pair2_fix_q_loss \
+--data_dir data/q10r \
+--embedding_model pretrained \
+--pretrained_model_name roberta-base \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6874216464688675,
+"recall": 0.6339113680154143,
+"f1": 0.6595829991980754
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_labeled_train_transfer \
@@ -700,20 +534,11 @@ p q_main.py \
 --load_weight_path ckpt/q10_pair2_fix_q_loss/best_model \
 --use_pair2_mlp \
 --fix_q_loss \
---ent_rel_file label.json \
---train_batch_size 16 \
---gradient_accumulation_steps 2 \
---config_file config.yml \
---fine_tune \
---max_sent_len 80 \
---max_wordpiece_len 80 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
 
-"precision": 0.7130730050933786,
-"recall": 0.693069306930693,
-"f1": 0.702928870292887
+"precision": 0.696078431372549,
+"recall": 0.7029702970297029,
+"f1": 0.6995073891625616
 
 ################################################################################
 Tagger task (10)
