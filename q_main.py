@@ -561,6 +561,17 @@ p q_main.py \
 "recall": 0.8547206165703276,                                            
 "f1": 0.864043630697312
 
+p q_main.py \
+--save_dir ckpt/q10_tags_freeze \
+--data_dir data/q10_tags \
+--freeze_bert \
+--task tagger \
+--config_file q_config.yml
+
+"precision": 0.6774675972083749,
+"recall": 0.5236994219653179,                                            
+"f1": 0.5907411432297328
+
 """
 
 

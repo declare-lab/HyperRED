@@ -108,6 +108,12 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "--freeze_bert",
+            "--freeze_bert",
+            action="store_true",
+            help="freeze_bert",
+        )
+        group.add(
             "-load_weight_path",
             "--load_weight_path",
             type=str,
@@ -471,6 +477,8 @@ class ConfigurationParer:
             log_file_level=getattr(cfg, "log_file_level", logging.NOTSET),
         )
 
+        if cfg.freeze_bert:
+            cfg.fine_tune = False
         return cfg
 
     def format_values(self):

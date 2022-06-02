@@ -131,6 +131,17 @@ precision:   0.6987045549519432
 recall:      0.644315992292871
 f1:          0.6704089815557338
 
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet \
+--dir_tags ckpt/q10_tags_freeze \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+precision:   0.5771947527749748
+recall:      0.44084778420038534
+f1:          0.49989075813851863
+
 """
 
 if __name__ == "__main__":
