@@ -1,5 +1,4 @@
 import json
-import os
 import pickle
 import random
 import shutil
@@ -39,6 +38,9 @@ class Entity(BaseModel):
     text: str
     offset: Span  # Token spans, start inclusive, end exclusive
     label: str
+
+    def as_tuple(self) -> Tuple[int, int, str]:
+        return self.offset[0], self.offset[1], self.label
 
 
 class Relation(BaseModel):
@@ -330,11 +332,33 @@ def add_joint_label(sent, label_vocab):
     return sent
 
 
+def add_tag_joint_label(sent, label_vocab):
+    ent_rel_id = label_vocab["id"]
+    none_id = ent_rel_id["O"]
+    seq_len = len(sent["sentText"].split(" "))
+    label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
+
+    spans = [Entity(**e).as_tuple() for e in sent["entityMentions"]]
+    encoder = BioEncoder()
+    tags = encoder.run(spans, seq_len)
+    if not sorted(encoder.decode(tags)) == sorted(spans):
+        print(dict(gold=sorted(spans), decoded=sorted(encoder.decode(tags))))
+
+    assert len(tags) == seq_len
+    for i, t in enumerate(tags):
+        label_matrix[i][i] = ent_rel_id[t]  # We only care about diagonal here
+
+    sent["jointLabelMatrix"] = label_matrix
+    sent["quintupletMatrix"] = SparseCube.empty().dict()
+    return sent
+
+
 def process(
     source_file: str,
     target_file: str,
     label_file: str = "data/quintuplet/label_vocab.json",
     pretrained_model: str = "bert-base-uncased",
+    use_tags: bool = False,
 ):
     print(dict(process=locals()))
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
@@ -345,10 +369,18 @@ def process(
 
     with open(source_file) as fin, open(target_file, "w") as fout:
         for line in tqdm(fin.readlines()):
-            sent = json.loads(line.strip())
-            sent = add_tokens(sent, auto_tokenizer)
-            sent = add_joint_label(sent, label_vocab)
-            print(json.dumps(sent), file=fout)
+            if use_tags:
+                s = Sentence(**json.loads(line))
+                for s in convert_sent_to_tags(s):
+                    sent = s.dict()
+                    sent = add_tokens(sent, auto_tokenizer)
+                    sent = add_tag_joint_label(sent, label_vocab)
+                    print(json.dumps(sent), file=fout)
+            else:
+                sent = json.loads(line.strip())
+                sent = add_tokens(sent, auto_tokenizer)
+                sent = add_joint_label(sent, label_vocab)
+                print(json.dumps(sent), file=fout)
 
 
 def make_label_file(pattern_in: str, path_out: str):
@@ -372,6 +404,31 @@ def make_label_file(pattern_in: str, path_out: str):
         qualifier=[label_map[name] for name in qualifiers],
         q_num_logits=len(qualifiers) + 2,
     )
+    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
+    with open(path_out, "w") as f:
+        f.write(json.dumps(info, indent=2))
+
+
+def make_tag_label_file(pattern_in: str, path_out: str):
+    tags = []
+    qualifiers = []
+    for path in sorted(Path().glob(pattern_in)):
+        with open(path) as f:
+            for line in tqdm(f):
+                s = Sentence(**json.loads(line))
+                for q in s.qualifierMentions:
+                    tags.append("B-" + q.label)
+                    tags.append("I-" + q.label)
+                    qualifiers.append(q.label)  # Dataset reader needs it
+
+    tags = sorted(set(tags))
+    qualifiers = sorted(set(qualifiers))
+    labels = ["O"] + tags + qualifiers
+    info = dict(
+        id={name: i for i, name in enumerate(labels)},
+        q_num_logits=len(tags) + 1,
+    )
+    print(dict(labels=len(labels), tags=len(tags), qualifiers=len(qualifiers)))
     Path(path_out).parent.mkdir(exist_ok=True, parents=True)
     with open(path_out, "w") as f:
         f.write(json.dumps(info, indent=2))
@@ -406,38 +463,6 @@ def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
     return outputs
 
 
-def process_tags(
-    path_in: str,
-    path_out: str,
-    path_temp: str = "temp.json",
-    path_sents_in: str = "",
-    **kwargs,
-):
-    print(dict(process_tags=locals()))
-    if path_sents_in:
-        del path_in
-        path_temp = path_sents_in
-    else:
-        make_sentences(path_in, path_temp)
-    with open(path_temp) as f:
-        sents = [Sentence(**json.loads(line)) for line in tqdm(f.readlines())]
-
-    with open(path_temp, "w") as f:
-        for s in tqdm(sents):
-            for new in convert_sent_to_tags(s):
-                f.write(new.json() + "\n")
-
-    process(source_file=path_temp, target_file=path_out, **kwargs)
-    os.remove(path_temp)
-
-
-def process_tags_many(folder_in: str, folder_out: str, **kwargs):
-    for path in Path(folder_in).glob("*.json"):
-        process_tags(
-            path_in=str(path), path_out=str(Path(folder_out) / path.name), **kwargs
-        )
-
-
 def match_sent_preds(
     sents: List[Sentence], raw_preds: List[RawPred], vocab
 ) -> List[Sentence]:
@@ -463,14 +488,23 @@ def load_raw_preds(path: str) -> List[RawPred]:
     return raw_preds
 
 
-def process_many(dir_in: str, dir_out: str, dir_temp: str = "temp", **kwargs):
+def process_many(
+    dir_in: str,
+    dir_out: str,
+    dir_temp: str = "temp",
+    make_tag_labels: bool = False,
+    **kwargs,
+):
     if Path(dir_temp).exists():
         shutil.rmtree(dir_temp)
     for path in sorted(Path(dir_in).glob("*.json")):
         make_sentences(str(path), str(Path(dir_temp) / path.name))
 
     path_label = str(Path(dir_out) / "label.json")
-    make_label_file("temp/*.json", path_label)
+    if make_tag_labels:
+        make_tag_label_file("temp/*.json", path_label)
+    else:
+        make_label_file("temp/*.json", path_label)
     for path in sorted(Path(dir_temp).glob("*.json")):
         process(str(path), str(Path(dir_out) / path.name), path_label, **kwargs)
 
@@ -502,25 +536,54 @@ def make_labeled_train_split(dir_in: str, dir_out: str, num_train: int, seed: in
                 f.write(s.json() + "\n")
 
 
+class BioEncoder:
+    def run(self, spans: List[Tuple[int, int, str]], length: int) -> List[str]:
+        tags = ["O" for _ in range(length)]
+        for start, end, label in spans:
+            assert start < end
+            assert end <= length
+            for i in range(start, end):
+                tags[i] = "I-" + label
+            tags[start] = "B-" + label
+        return tags
+
+    def decode(self, tags: List[str]) -> List[Tuple[int, int, str]]:
+        parts = []
+        for i, t in enumerate(tags):
+            assert t[0] in "BIO"
+            if t.startswith("B"):
+                parts.append([i])
+            if parts and t.startswith("I"):
+                parts[-1].append(i)
+
+        spans = []
+        for indices in parts:
+            if indices:
+                start = min(indices)
+                end = max(indices) + 1
+                label = tags[start].split("-", maxsplit=1)[1]
+                spans.append((start, end, label))
+
+        return spans
+
+
+def test_bio():
+    encoder = BioEncoder()
+    spans = [(0, 3, "one"), (3, 4, "one"), (7, 8, "three")]
+    tags = encoder.run(spans, 8)
+    preds = encoder.decode(tags)
+    print(dict(spans=spans))
+    print(dict(tags=tags))
+    print(dict(pred=preds))
+    assert spans == preds
+
+
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10r/ --pretrained_model roberta-base
 p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
-
-mkdir -p data/q10_tagger/
-cp data/q10/label.json data/q10_tagger/
-p data/q_process.py process_tags_many \
---folder_in ../quintuplet/outputs/data/flat_min_10 \
---folder_out data/q10_tagger \
---label_file data/q10_tagger/label.json
-
-mkdir -p data/q30_tagger/
-cp data/q30/label.json data/q30_tagger/
-p data/q_process.py process_tags_many \
---folder_in ../quintuplet/outputs/data/flat_min_30 \
---folder_out data/q30_tagger \
---label_file data/q30_tagger/label.json
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --make_tag_labels True --use_tags True
 
 """
 

@@ -1,13 +1,12 @@
 import logging
 from typing import List, Tuple
 
-import numpy as np
 import torch
 import torch.nn as nn
+from data.q_process import BioEncoder
 from models.embedding_models.bert_embedding_model import BertEmbedModel
 from models.embedding_models.pretrained_embedding_model import \
     PretrainedEmbedModel
-from modules.token_embedders.bert_encoder import BertLinear
 
 logger = logging.getLogger(__name__)
 
@@ -49,30 +48,18 @@ class EntRelJointDecoder(nn.Module):
         self.cfg = cfg
         self.ent_rel_file = ent_rel_file
         self.vocab = vocab
-        self.max_span_length = cfg.max_span_length
-        self.activation = nn.GELU()
         self.device = cfg.device
-        self.separate_threshold = cfg.separate_threshold
 
         if cfg.embedding_model == "bert":
             self.embedding_model = BertEmbedModel(cfg, vocab)
         elif cfg.embedding_model == "pretrained":
             self.embedding_model = PretrainedEmbedModel(cfg, vocab)
 
-        self.final_mlp = BertLinear(
-            input_size=self.embedding_model.get_hidden_size(),
-            output_size=ent_rel_file["q_num_logits"],
-            activation=nn.Identity(),
-            dropout=0.0,
+        self.final_mlp = nn.Linear(
+            self.embedding_model.get_hidden_size(),
+            ent_rel_file["q_num_logits"],
         )
 
-        if cfg.logit_dropout > 0:
-            self.logit_dropout = nn.Dropout(p=cfg.logit_dropout)
-        else:
-            self.logit_dropout = lambda x: x
-
-        self.none_idx = self.vocab.get_token_index("None", "ent_rel_id")
-        self.q_label = np.array(self.ent_rel_file["qualifier"])
         self.element_loss = nn.CrossEntropyLoss()
 
     def forward(self, batch_inputs):
@@ -101,8 +88,6 @@ class EntRelJointDecoder(nn.Module):
             results["joint_label_preds"] = torch.diag_embed(
                 batch_normalized_joint_score.argmax(-1)
             )
-            results["quintuplet_preds"] = torch.zeros(bs, seq_len, seq_len, seq_len)
-
             batch_seq_tokens_lens = batch_inputs["tokens_lens"]
             decode_preds = self.soft_joint_decoding(
                 batch_normalized_joint_score, batch_seq_tokens_lens
@@ -111,7 +96,7 @@ class EntRelJointDecoder(nn.Module):
 
         batch_labels = batch_inputs["joint_label_matrix"].diagonal(dim1=1, dim2=2)
         results["loss"] = self.element_loss(
-            self.logit_dropout(batch_joint_score[batch_mask]),
+            batch_joint_score[batch_mask],
             batch_labels[batch_mask],
         )
         results["joint_score"] = batch_joint_score
@@ -120,34 +105,17 @@ class EntRelJointDecoder(nn.Module):
     def soft_joint_decoding(
         self, batch_normalized_joint_score, batch_seq_tokens_lens
     ) -> dict:
-        """soft_joint_decoding extracts entity and relation at the same time,
-        and consider the interconnection of entity and relation.
-
-        Args:
-            batch_normalized_joint_score (tensor): batch normalized joint score
-            batch_seq_tokens_lens (list): batch sequence length
-
-        Returns:
-            tuple: predicted entity and relation
-        """
-
         ent_preds = []
-        batch_normalized_joint_score = batch_normalized_joint_score.cpu().numpy()
-        ent_label = self.q_label
+        encoder = BioEncoder()
+        label_map = {i: name for name, i in self.ent_rel_file["id"].items()}
 
         for idx, seq_len in enumerate(batch_seq_tokens_lens):
-            ent_pred = {}
             joint_score = batch_normalized_joint_score[idx][:seq_len, :]
             joint_preds = joint_score.argmax(-1)
             assert joint_preds.shape == (seq_len,)
-            spans = decode_nonzero_spans([int(x) for x in joint_preds])
-
-            for span in spans:
-                score = np.mean(joint_score[span[0] : span[1], :], axis=0)
-                pred = ent_label[np.argmax(score[ent_label])].item()
-                pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                ent_pred[span] = pred_label
-            ent_preds.append(ent_pred)
+            tags = [label_map[i] for i in joint_preds.tolist()]
+            spans = encoder.decode(tags)
+            ent_preds.append({(start, end): label for start, end, label in spans})
 
         assert len(ent_preds) == len(batch_seq_tokens_lens)
         return dict(

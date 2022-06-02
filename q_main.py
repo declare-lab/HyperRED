@@ -552,18 +552,14 @@ p q_main.py \
 Tagger task (10)
 
 p q_main.py \
+--save_dir ckpt/q10_tags \
+--data_dir data/q10_tags \
 --task tagger \
---ent_rel_file label.json \
---train_batch_size 32 \
---config_file config.yml \
---save_dir ckpt/q10_tagger \
---data_dir data/q10_tagger \
---fine_tune \
---max_sent_len 90 \
---max_wordpiece_len 90 \
---epochs 30 \
---pretrain_epochs 0 \
---device 0
+--config_file q_config.yml
+
+"precision": 0.8735722725482473,
+"recall": 0.8547206165703276,                                            
+"f1": 0.864043630697312
 
 """
 
