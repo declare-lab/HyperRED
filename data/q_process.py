@@ -358,7 +358,7 @@ def process(
     target_file: str,
     label_file: str = "data/quintuplet/label_vocab.json",
     pretrained_model: str = "bert-base-uncased",
-    use_tags: bool = False,
+    mode: str = "",
 ):
     print(dict(process=locals()))
     auto_tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
@@ -369,7 +369,7 @@ def process(
 
     with open(source_file) as fin, open(target_file, "w") as fout:
         for line in tqdm(fin.readlines()):
-            if use_tags:
+            if mode == "tags":
                 s = Sentence(**json.loads(line))
                 for s in convert_sent_to_tags(s):
                     sent = s.dict()
@@ -379,7 +379,12 @@ def process(
             else:
                 sent = json.loads(line.strip())
                 sent = add_tokens(sent, auto_tokenizer)
-                sent = add_joint_label(sent, label_vocab)
+                if mode == "joint":
+                    sent = add_joint_label(sent, label_vocab)
+                elif mode == "entity":
+                    sent = add_tag_joint_label(sent, label_vocab)
+                else:
+                    raise ValueError
                 print(json.dumps(sent), file=fout)
 
 
@@ -434,6 +439,35 @@ def make_tag_label_file(pattern_in: str, path_out: str):
         f.write(json.dumps(info, indent=2))
 
 
+def make_entity_label_file(pattern_in: str, path_out: str):
+    tags = []
+    others = []
+    for path in sorted(Path().glob(pattern_in)):
+        with open(path) as f:
+            for line in tqdm(f):
+                s = Sentence(**json.loads(line))
+                for e in s.entityMentions:
+                    tags.append("B-" + e.label)
+                    tags.append("I-" + e.label)
+                    others.append(e.label)
+                for r in s.relationMentions:
+                    others.append(r.label)
+                for q in s.qualifierMentions:
+                    others.append(q.label)
+
+    tags = sorted(set(tags))
+    others = sorted(set(others))
+    labels = ["O"] + tags + others
+    info = dict(
+        id={name: i for i, name in enumerate(labels)},
+        q_num_logits=len(tags) + 1,
+    )
+    print(dict(labels=len(labels), tags=len(tags), others=len(others)))
+    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
+    with open(path_out, "w") as f:
+        f.write(json.dumps(info, indent=2))
+
+
 def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
     id_to_entity = {e.emId: e for e in sent.entityMentions}
     pair_to_qualifiers = {}
@@ -478,7 +512,7 @@ def process_many(
     dir_in: str,
     dir_out: str,
     dir_temp: str = "temp",
-    make_tag_labels: bool = False,
+    mode: str = "joint",
     **kwargs,
 ):
     if Path(dir_temp).exists():
@@ -487,12 +521,16 @@ def process_many(
         make_sentences(str(path), str(Path(dir_temp) / path.name))
 
     path_label = str(Path(dir_out) / "label.json")
-    if make_tag_labels:
+    if mode == "tags":
         make_tag_label_file("temp/*.json", path_label)
+    elif mode == "entity":
+        make_entity_label_file("temp/*.json", path_label)
     else:
         make_label_file("temp/*.json", path_label)
     for path in sorted(Path(dir_temp).glob("*.json")):
-        process(str(path), str(Path(dir_out) / path.name), path_label, **kwargs)
+        process(
+            str(path), str(Path(dir_out) / path.name), path_label, mode=mode, **kwargs
+        )
 
 
 def make_labeled_train_split(dir_in: str, dir_out: str, num_train: int, seed: int = 0):
@@ -569,7 +607,8 @@ p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q1
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10r/ --pretrained_model roberta-base
 p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --make_tag_labels True --use_tags True
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_entity/ --mode entity
 
 """
 

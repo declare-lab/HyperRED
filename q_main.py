@@ -572,6 +572,19 @@ p q_main.py \
 "recall": 0.5236994219653179,                                            
 "f1": 0.5907411432297328
 
+################################################################################
+Entity task (10)
+
+p q_main.py \
+--save_dir ckpt/q10_entity \
+--data_dir data/q10_entity \
+--task tagger \
+--config_file q_config.yml
+
+"precision": 0.8726650062266501,
+"recall": 0.8715796019900498,                                            
+"f1": 0.8721219663970132
+
 """
 
 
