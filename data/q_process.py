@@ -463,20 +463,6 @@ def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
     return outputs
 
 
-def match_sent_preds(
-    sents: List[Sentence], raw_preds: List[RawPred], vocab
-) -> List[Sentence]:
-    preds = [p.as_sentence(vocab) for p in raw_preds]
-    text_to_pred = {p.sentText.lower(): p for p in preds}
-
-    empty = RawPred.empty().as_sentence(vocab)
-    outputs = [text_to_pred.get(s.sentText.lower(), empty) for s in sents]
-
-    print("\nHow many pairs have empty preds?")
-    print(dict(num=len([p for p in outputs if p == empty])))
-    return outputs
-
-
 def load_raw_preds(path: str) -> List[RawPred]:
     raw_preds = []
     with open(path, "rb") as f:

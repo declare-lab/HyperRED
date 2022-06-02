@@ -5,9 +5,7 @@ from typing import List
 
 from fire import Fire
 
-from data.q_process import (Qualifier, RawPred, Sentence, load_raw_preds,
-                            process)
-from inputs.vocabulary import Vocabulary
+from data.q_process import Qualifier, Sentence, process
 from q_main import run_eval, score_preds
 from scoring import QuintupletScorer
 
@@ -52,38 +50,15 @@ def merge_pipeline_preds(
     return sents
 
 
-def prepare_tagger_pred_inputs(
-    path_triplets: str, path_vocab: str, path_out: str, path_temp: str, **kwargs
-):
-    vocab = Vocabulary.load(path_vocab)
-    with open(path_temp, "w") as f:
-        for r in load_raw_preds(path_triplets):
-            f.write(r.as_sentence(vocab).json() + "\n")
-    process(source_file=path_temp, target_file=path_out, **kwargs)
-
-
-def convert_raw_to_sents(path_in: str, path_vocab: str, path_out: str):
-    vocab = Vocabulary.load(path_vocab)
-    with open(path_out, "w") as f:
-        for r in load_raw_preds(path_in):
-            f.write(r.as_sentence(vocab).json() + "\n")
-
-
 def eval_pipeline(
     dir_triplets: str,
     dir_tags: str,
     dir_data: str,
     path_label_tags: str,
     data_split: str,
-    temp_triplets: str = "temp_triplets.json",
     temp_tags_in: str = "temp_tags_in.json",
-    temp_tags: str = "temp_tags_out.json",
 ):
-    convert_raw_to_sents(
-        path_in=str(Path(dir_triplets) / f"raw_{data_split}.pkl"),
-        path_vocab=str(Path(dir_triplets) / "vocabulary.pickle"),
-        path_out=temp_triplets,
-    )
+    temp_triplets = str(Path(dir_triplets) / f"{data_split}.json")
     process(
         source_file=temp_triplets,
         target_file=temp_tags_in,
@@ -97,26 +72,17 @@ def eval_pipeline(
         task="tagger",
         path_in=temp_tags_in,
     )
-    convert_raw_to_sents(
-        path_in=str(Path(dir_tags) / "raw_pred.pkl"),
-        path_vocab=str(Path(dir_tags) / "vocabulary.pickle"),
-        path_out=temp_tags,
-    )
 
+    temp_tags = str(Path(dir_tags) / "pred.json")
     preds = merge_pipeline_preds(path_triplets=temp_triplets, path_tags=temp_tags)
-    text_to_pred = {p.sentText: p for p in preds}
-    os.remove(temp_triplets)
     os.remove(temp_tags_in)
     os.remove(temp_tags)
 
     with open(Path(dir_data) / f"{data_split}.json") as f:
         sents = [Sentence(**json.loads(line)) for line in f]
     scorer = QuintupletScorer()
-    empty = RawPred.empty().as_sentence(None)
-    preds = [text_to_pred.get(s.sentText, empty) for s in sents]
     results = scorer.run(preds, sents)
     print(json.dumps(results, indent=2))
-    return results
 
 
 """

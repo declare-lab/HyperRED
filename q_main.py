@@ -16,8 +16,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from data.q_process import (Sentence, SparseCube, load_raw_preds,
-                            match_sent_preds)
+from data.q_process import RawPred, Sentence, SparseCube
 from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
 from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField
@@ -59,16 +58,13 @@ def run_eval(
     evaluate(cfg, dataset, model, data_split, path_in=path_in)
 
 
-def score_preds(path_pred: str, path_gold: str, path_vocab: str) -> dict:
-    raw_preds = load_raw_preds(path_pred)
-    vocab = Vocabulary.load(path_vocab)
+def score_preds(path_pred: str, path_gold: str) -> dict:
+    with open(path_pred) as f:
+        preds = [Sentence(**json.loads(line)) for line in f]
     with open(path_gold) as f:
         sents = [Sentence(**json.loads(line)) for line in f]
 
-    print(dict(preds=len(raw_preds), sents=len(sents)))
-    preds = match_sent_preds(sents, raw_preds, vocab)
     results = {}
-
     for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
         results[scorer.name] = scorer.run(preds, sents)
     print(json.dumps(results, indent=2))
@@ -296,12 +292,16 @@ def evaluate(
     with open(path, "wb") as f:
         pickle.dump(all_outputs, f)
 
+    # Save processed sents
+    path = Path(cfg.save_dir) / f"{data_split}.json"
+    print(dict(path=path))
+    with open(path, "w") as f:
+        for r in all_outputs:
+            sent = RawPred(**r).as_sentence(model.vocab)
+            f.write(sent.json() + "\n")
+
     mapping = dict(train=cfg.train_file, dev=cfg.dev_file, test=cfg.test_file)
-    results = score_preds(
-        path_pred=str(path),
-        path_gold=path_in or mapping[data_split],
-        path_vocab=cfg.vocabulary_file,
-    )
+    results = score_preds(path_pred=str(path), path_gold=path_in or mapping[data_split])
 
     score = dict(
         quintuplet=results["quintuplet"]["f1"],

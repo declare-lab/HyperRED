@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple
 
-from data.q_process import Sentence
+from data.q_process import RawPred, Sentence
 
 
 def safe_divide(a: float, b: float) -> float:
@@ -35,7 +35,18 @@ class StrictScorer:
             tuples.append(t)
         return tuples
 
+    def match_gold_to_pred(
+        self, pred: List[Sentence], gold: List[Sentence]
+    ) -> List[Sentence]:
+        text_to_pred = {p.sentText: p for p in pred}
+        empty = RawPred.empty().as_sentence(None)
+        matched = [text_to_pred.get(s.sentText, empty) for s in gold]
+        print("\nHow many gold sents have no matching pred?")
+        print(dict(num=len([p for p in matched if p == empty])))
+        return matched
+
     def run(self, pred: List[Sentence], gold: List[Sentence]) -> Dict[str, float]:
+        pred = self.match_gold_to_pred(pred, gold)
         assert len(pred) == len(gold)
         num_correct = 0
         num_pred = 0
