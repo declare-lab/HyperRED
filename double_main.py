@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 import pickle
 import random
 from argparse import Namespace
 from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -89,7 +91,15 @@ def prepare_inputs(batch_inputs, device):
     return batch_inputs
 
 
-def train(cfg, dataset, model):
+class DoubleModel(nn.Module):
+    def __init__(self, kwargs: dict, kwargs_2: dict):
+        super().__init__()
+        self.extractor = TripletModel(**kwargs)
+        self.tagger = Tagger(**kwargs_2)
+        self.tagger.embedding_model = self.extractor.embedding_model
+
+
+def train(cfg, dataset, dataset_2, model):
     logger.info("Training starting...")
 
     for name, param in model.named_parameters():
@@ -149,7 +159,7 @@ def train(cfg, dataset, model):
         )
         / (cfg.train_batch_size * cfg.gradient_accumulation_steps)
         * cfg.epochs
-    )
+    ) * 2
     num_warmup_steps = int(cfg.warmup_rate * total_train_steps) + 1
     num_batches = cfg.epochs * dataset.get_dataset_size("train") // cfg.train_batch_size
     scheduler = get_linear_schedule_with_warmup(
@@ -159,18 +169,21 @@ def train(cfg, dataset, model):
     )
     assert scheduler is not None
 
-    best_loss = 1e9
     best_score = -1e9
+    best_score_2 = -1e9
     accumulation_steps = 0
     model.zero_grad()
     seen_epochs = set()
     epoch_info = dict(epoch=0.0)
 
-    for epoch, batch in tqdm(
-        dataset.get_batch("train", cfg.train_batch_size, None), total=num_batches
+    for (epoch, batch), (_, batch_2) in tqdm(
+        zip(
+            dataset.get_batch("train", cfg.train_batch_size, None),
+            dataset_2.get_batch("train", cfg.train_batch_size, None),
+        ),
+        total=num_batches,
     ):
         if epoch > cfg.epochs:
-            model.save(cfg.last_model_path)
             break
 
         if epoch not in seen_epochs:
@@ -180,29 +193,39 @@ def train(cfg, dataset, model):
                 scheduler.step()
                 model.zero_grad()
 
-            dev_loss, dev_score = evaluate(cfg, dataset, model, data_split="dev")
+            dev_loss, dev_score = evaluate(
+                model.extractor.cfg, dataset, model.extractor, data_split="dev"
+            )
+            dev_loss_2, dev_score_2 = evaluate(
+                model.tagger.cfg, dataset_2, model.tagger, data_split="dev"
+            )
             epoch_info.update(
                 dev_loss=dev_loss,
-                best_loss=best_loss,
+                dev_loss_2=dev_loss_2,
                 score=dev_score,
                 best_score=best_score,
+                score_2=dev_score_2,
+                best_score_2=best_score_2,
             )
-            if dev_loss < best_loss:
-                best_loss = dev_loss
             if dev_score > best_score:
                 best_score = dev_score
-                logger.info(str(dict(save=cfg.best_model_path)))
-                model.save(cfg.best_model_path)
-
+                path = model.extractor.cfg.best_model_path
+                logger.info(str(dict(save=path)))
+                model.extractor.save(path)
+            if dev_score_2 > best_score_2:
+                best_score_2 = dev_score_2
+                path = model.tagger.cfg.best_model_path
+                logger.info(str(dict(save=path)))
+                model.tagger.save(path)
             logger.info(str(epoch_info))
 
         model.train()
         batch["epoch"] = epoch - 1
-        outputs = model(prepare_inputs(batch, cfg.device))
-        loss = outputs["loss"]
-        for k, v in outputs.items():
-            if "loss" in k:
-                epoch_info[k] = round(v.cpu().item(), 4)
+        batch_2["epoch"] = epoch - 1
+        outputs = model.extractor(prepare_inputs(batch, cfg.device))
+        outputs_2 = model.tagger(prepare_inputs(batch_2, cfg.device))
+        loss = outputs["loss"] + outputs_2["loss"]
+        epoch_info["loss"] = loss
         epoch_info.update(epoch=epoch)
 
         if cfg.gradient_accumulation_steps > 1:
@@ -311,28 +334,7 @@ def evaluate(
     return np.mean(losses), score
 
 
-def main():
-    # config settings
-    parser = ConfigurationParer()
-    parser.add_save_cfgs()
-    parser.add_data_cfgs()
-    parser.add_model_cfgs()
-    parser.add_optimizer_cfgs()
-    parser.add_run_cfgs()
-
-    cfg = parser.parse_args()
-    logger.info(parser.format_values())
-
-    # set random seed
-    random.seed(cfg.seed)
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    if cfg.device > -1 and not torch.cuda.is_available():
-        logger.error("config conflicts: no gpu available, use cpu for training.")
-        cfg.device = -1
-    if cfg.device > -1:
-        torch.cuda.manual_seed(cfg.seed)
-
+def build_data_vocab(cfg: Namespace) -> Tuple[Dataset, Vocabulary, dict]:
     # define fields
     tokens = TokenField("tokens", "tokens", "tokens", True)
     separate_positions = RawTokenField("separate_positions", "separate_positions")
@@ -413,177 +415,85 @@ def main():
     )
     wo_padding_namespace = ["separate_positions", "span2ent", "span2rel"]
     ace_dataset.set_wo_padding_namespace(wo_padding_namespace=wo_padding_namespace)
+    ace_dataset.save(os.path.join(cfg.save_dir, "dataset.pickle"))
+    vocab.save(cfg.vocabulary_file)
+    return ace_dataset, vocab, ent_rel_file
 
-    if cfg.test:
-        vocab = Vocabulary.load(cfg.vocabulary_file)
-    else:
-        vocab.save(cfg.vocabulary_file)
+
+def make_config_2(cfg: Namespace) -> Namespace:
+    # Refer to new_argparse.parse_args
+    cfg = deepcopy(cfg)
+    cfg.task = cfg.task_2
+    cfg.data_dir = cfg.data_dir_2
+    cfg.save_dir = cfg.save_dir_2
+    cfg.train_file = str(Path(cfg.data_dir) / Path(cfg.train_file).name)
+    cfg.dev_file = str(Path(cfg.data_dir) / Path(cfg.dev_file).name)
+    cfg.test_file = str(Path(cfg.data_dir) / Path(cfg.test_file).name)
+    cfg.ent_rel_file = str(Path(cfg.data_dir) / Path(cfg.ent_rel_file).name)
+    cfg.best_model_path = os.path.join(cfg.save_dir, "best_model")
+    cfg.last_model_path = os.path.join(cfg.save_dir, "last_model")
+    cfg.vocabulary_file = os.path.join(cfg.save_dir, "vocabulary.pickle")
+    cfg.model_checkpoints_dir = os.path.join(cfg.save_dir, "model_ckpts")
+    Path(cfg.model_checkpoints_dir).mkdir(parents=True)
+    return cfg
+
+
+def main():
+    # config settings
+    parser = ConfigurationParer()
+    parser.add_save_cfgs()
+    parser.add_data_cfgs()
+    parser.add_model_cfgs()
+    parser.add_optimizer_cfgs()
+    parser.add_run_cfgs()
+
+    cfg = parser.parse_args()
+    logger.info(parser.format_values())
+
+    # set random seed
+    random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    if cfg.device > -1 and not torch.cuda.is_available():
+        logger.error("config conflicts: no gpu available, use cpu for training.")
+        cfg.device = -1
+    if cfg.device > -1:
+        torch.cuda.manual_seed(cfg.seed)
+
+    cfg_2 = make_config_2(cfg)
+    data, vocab, labels = build_data_vocab(cfg)
+    data_2, vocab_2, labels_2 = build_data_vocab(cfg_2)
 
     # joint model
-    model = load_model(cfg.task, cfg=cfg, vocab=vocab, ent_rel_file=ent_rel_file)
+    model = DoubleModel(
+        kwargs=dict(cfg=cfg, vocab=vocab, ent_rel_file=labels),
+        kwargs_2=dict(cfg=cfg_2, vocab=vocab_2, ent_rel_file=labels_2),
+    )
     if cfg.device > -1:
         model.cuda(device=cfg.device)
 
-    if cfg.load_weight_path:
-        model.load_state_dict(
-            EntRelJointDecoder.load(cfg.load_weight_path).state_dict()
-        )
-
-    path_data = str(Path(cfg.save_dir) / "dataset.pickle")
-    ace_dataset.save(path_data)
-    train(cfg, ace_dataset, model)
-    run_eval(
-        path=cfg.best_model_path, path_data=path_data, data_split="test", task=cfg.task
-    )
+    train(cfg, dataset=data, dataset_2=data_2, model=model)
 
 
 """
-################################################################################
-Distant supervised + filtered dev/test (10)
 
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_0 \
+p double_main.py \
+--save_dir ckpt/double/q10_triplet \
+--save_dir_2 ckpt/double/q10_tags \
 --data_dir data/q10 \
---prune_topk 0 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6625742574257426,                                         
-"recall": 0.6447013487475916,                                            
-"f1": 0.653515625
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_10 \
---data_dir data/q10 \
---prune_topk 10 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-                                                                                                                       
-"precision": 0.6751721344673957,                                                                                                                          "recall": 0.6423892100192679,                                                                                                                         
-"f1": 0.6583728278041073
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
---data_dir data/q10 \
---prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6719291490180979,
-"recall": 0.6724470134874759,
-"f1": 0.6721879815100154
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_30 \
---data_dir data/q10 \
---prune_topk 30 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6750499001996008,
-"recall": 0.6516377649325626,  
-"f1": 0.6631372549019608
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_40 \
---data_dir data/q10 \
---prune_topk 40 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-                                                                                                                      
-"precision": 0.6715686274509803,
-"recall": 0.6335260115606937,     
-"f1": 0.6519928613920285
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss \
---data_dir data/q10 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6717373899119295,                                                                                                                          "recall": 0.6466281310211947,                                                                                                                         
-"f1": 0.6589436481445121
-
-p q_main.py \
---save_dir ckpt/q10r_pair2_fix_q_loss \
---data_dir data/q10r \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6874216464688675,
-"recall": 0.6339113680154143,
-"f1": 0.6595829991980754
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_labeled_train_transfer \
---data_dir data/q10_labeled_train \
---load_weight_path ckpt/q10_pair2_fix_q_loss/best_model \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.696078431372549,
-"recall": 0.7029702970297029,
-"f1": 0.6995073891625616
-
-################################################################################
-Triplet task (10)
-
-p q_main.py \
---save_dir ckpt/q10_triplet \
---data_dir data/q10 \
+--data_dir_2 data/q10_tags \
 --task triplet \
+--task_2 tagger \
 --config_file q_config.yml
 
-"precision": 0.7585431654676259,
-"recall": 0.7296712802768166,
-"f1": 0.7438271604938272
-
-################################################################################
-Tagger task (10)
-
-p q_main.py \
---save_dir ckpt/q10_tags \
---data_dir data/q10_tags \
---task tagger \
---config_file q_config.yml
-
-"precision": 0.8735722725482473,
-"recall": 0.8547206165703276,                                            
-"f1": 0.864043630697312
-
-p q_main.py \
---save_dir ckpt/q10_tags_freeze \
---data_dir data/q10_tags \
---freeze_bert \
---task tagger \
---config_file q_config.yml
-
-"precision": 0.6774675972083749,
-"recall": 0.5236994219653179,                                            
-"f1": 0.5907411432297328
-
-################################################################################
-Entity task (10)
-
-p q_main.py \
---save_dir ckpt/q10_entity \
---data_dir data/q10_entity \
---task tagger \
---config_file q_config.yml
-
-"precision": 0.8726650062266501,
-"recall": 0.8715796019900498,                                            
-"f1": 0.8721219663970132
+'epoch': 29,
+'dev_loss': 0.0,
+'dev_loss_2': 0.07230172460041263,
+'score': 1.6062650083125096,
+'best_score': 1.606962118870837,
+'score_2': 0.8534278959810875,
+'best_score_2': 0.8677685950413223,
+'loss': tensor(0.5845, device='cuda:0', grad_fn=<AddBackward0>)
 
 """
 

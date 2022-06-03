@@ -108,6 +108,27 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "-task_2",
+            "--task_2",
+            type=str,
+            default="",
+            help="task_2",
+        )
+        group.add(
+            "-save_dir_2",
+            "--save_dir_2",
+            type=str,
+            default="",
+            help="save_dir_2",
+        )
+        group.add(
+            "-data_dir_2",
+            "--data_dir_2",
+            type=str,
+            default="",
+            help="data_dir_2",
+        )
+        group.add(
             "--freeze_bert",
             "--freeze_bert",
             action="store_true",

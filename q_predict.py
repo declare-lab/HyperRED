@@ -63,7 +63,7 @@ def eval_pipeline(
         source_file=temp_triplets,
         target_file=temp_tags_in,
         label_file=path_label_tags,
-        use_tags=True,
+        mode="tags",
     )
     run_eval(
         path=str(Path(dir_tags) / "best_model"),
@@ -107,6 +107,23 @@ p q_predict.py eval_pipeline \
 precision:   0.5771947527749748
 recall:      0.44084778420038534
 f1:          0.49989075813851863
+
+p q_predict.py run_eval ckpt/double/q10_triplet/best_model ckpt/double/q10_triplet/dataset.pickle test --task triplet
+
+"precision": 0.7602870813397129,
+"recall": 0.6872837370242214,
+"f1": 0.7219445706497047
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/double/q10_triplet \
+--dir_tags ckpt/double/q10_tags \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.7016129032258065,
+"recall": 0.6034682080924856,
+"f1": 0.6488502175264139
 
 """
 
