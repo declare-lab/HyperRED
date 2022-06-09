@@ -125,6 +125,17 @@ p q_predict.py eval_pipeline \
 "recall": 0.6034682080924856,
 "f1": 0.6488502175264139
 
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert/ \
+--dir_tags ckpt/q10_tags_distilbert/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6905281536446967,
+"recall": 0.6096339113680154,
+"f1": 0.6475644699140402
+
 """
 
 if __name__ == "__main__":

@@ -548,6 +548,14 @@ p q_main.py \
 "recall": 0.7296712802768166,
 "f1": 0.7438271604938272
 
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_triplet_distilbert \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
 ################################################################################
 Tagger task (10)
 
@@ -571,6 +579,14 @@ p q_main.py \
 "precision": 0.6774675972083749,
 "recall": 0.5236994219653179,                                            
 "f1": 0.5907411432297328
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_tags_distilbert \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
 
 ################################################################################
 Entity task (10)
