@@ -535,6 +535,19 @@ p q_main.py \
 "recall": 0.7029702970297029,
 "f1": 0.6995073891625616
 
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_triplet_biaffine_prune_20 \
+--data_dir data/q10 \
+--prune_topk 20 \
+--use_triplet_biaffine \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6766325727773407,
+"recall": 0.6628131021194605,
+"f1": 0.6696515475958732
+
 ################################################################################
 Triplet task (10)
 

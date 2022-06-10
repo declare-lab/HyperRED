@@ -167,6 +167,16 @@ class EntRelJointDecoder(nn.Module):
         )
         self.U.data.zero_()
 
+        if self.get_config("use_triplet_biaffine"):
+            self.X = nn.parameter.Parameter(
+                torch.FloatTensor(
+                    self.vocab.get_vocab_size("ent_rel_id"),
+                    cfg.mlp_hidden_size,
+                    cfg.mlp_hidden_size,
+                )
+            )
+            self.X.data.zero_()
+
         if cfg.logit_dropout > 0:
             self.logit_dropout = nn.Dropout(p=cfg.logit_dropout)
         else:
@@ -206,6 +216,13 @@ class EntRelJointDecoder(nn.Module):
         pair = torch.cat([head, tail], dim=-1)
         pair = self.pair_mlp(pair)
         batch_joint_score = self.final_mlp(pair)
+        if self.get_config("use_triplet_biaffine"):
+            del batch_joint_score
+            triplet_head = self.head_mlp(batch_seq_tokens_encoder_repr)
+            triplet_tail = self.tail_mlp(batch_seq_tokens_encoder_repr)
+            batch_joint_score = torch.einsum(
+                "bxi, oij, byj -> bxyo", triplet_head, self.X, triplet_tail
+            )
 
         if self.prune_topk > 0:
             topk = min(seq_len, self.prune_topk)

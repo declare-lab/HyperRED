@@ -108,6 +108,12 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "--use_triplet_biaffine",
+            "--use_triplet_biaffine",
+            action="store_true",
+            help="use_triplet_biaffine",
+        )
+        group.add(
             "-task_2",
             "--task_2",
             type=str,
@@ -482,7 +488,7 @@ class ConfigurationParer:
         ), f"dataset directory {cfg.data_dir} not exists !!!"
         for file in ["train_file", "dev_file", "test_file", "ent_rel_file"]:
             if getattr(cfg, file, None) is not None:
-                setattr(cfg, file, os.path.join(cfg.data_dir, getattr(cfg, file, None)))
+                setattr(cfg, file, os.path.join(cfg.data_dir, getattr(cfg, file, "")))
 
         if getattr(cfg, "log_file", None) is not None:
             cfg.log_file = os.path.join(cfg.save_dir, cfg.log_file)
