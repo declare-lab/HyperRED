@@ -372,16 +372,21 @@ def test_top_k():
     # breakpoint()
 
 
-def test_transformer(bs: int = 64, seq_len: int = 512, name: str = "bert-base-uncased"):
-    device = torch.device("cuda")
-    model = AutoModel.from_pretrained(name).to(device)
-    import time
+def test_transformer(
+    device_ids: List[int],
+    bs: int = 64,
+    seq_len: int = 512,
+    name: str = "bert-base-uncased",
+):
+    print(locals())
+    devices = [torch.device(f"cuda:{i}") for i in device_ids]
+    models = [AutoModel.from_pretrained(name).to(d) for d in devices]
 
     for _ in tqdm(range(int(1e9))):
-        x = torch.zeros(bs, seq_len, dtype=torch.long, device=device)
-        y = model(x)
-        time.sleep(0.1)
-        assert y is not None
+        for d, m in zip(devices, models):
+            x = torch.zeros(bs, seq_len, dtype=torch.long, device=d)
+            y = m(x)
+            assert y is not None
 
 
 def test_prune_eval(
@@ -432,9 +437,9 @@ Findings
 - Separate MLP for triplet and quintuplet helps (+2 F1)
 - Auxiliary entity seq labeling loss doesn't help (-4 F1)
 - Distant training then labeled continue train helps (+3 F1)
+- Cube-pruning helps
 
 Tasks
-- pruning / cuboid dropout?
 - position embeddings
 
 """
