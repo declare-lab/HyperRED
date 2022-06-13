@@ -442,6 +442,32 @@ def main():
 Distant supervised + filtered dev/test (10)
 
 p q_main.py \
+--save_dir ckpt/q10_hidden_150_fix_q_loss \
+--mlp_hidden_size 150 \
+--train_batch_size 8 \
+--gradient_accumulation_steps 4 \
+--data_dir data/q10 \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6454475308641975,
+"recall": 0.6447013487475916,
+"f1": 0.6450742240215924
+
+p q_main.py \
+--save_dir ckpt/q10_hidden_300_fix_q_loss \
+--mlp_hidden_size 300 \
+--train_batch_size 8 \
+--gradient_accumulation_steps 4 \
+--data_dir data/q10 \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6575500770416025,
+"recall": 0.6578034682080924,
+"f1": 0.6576767482180697
+
+p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_0 \
 --data_dir data/q10 \
 --prune_topk 0 \
