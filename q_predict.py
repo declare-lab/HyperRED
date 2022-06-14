@@ -119,6 +119,28 @@ p q_predict.py eval_pipeline \
 "recall": 0.5740982993832928,
 "f1": 0.6241365298659082
 
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_1/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_1/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6921871502126707,                                                                                                                            
+"recall": 0.5778359185199028,
+"f1": 0.6298635159910368
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_2/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_2/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.69197836863452,
+"recall": 0.5739114184264623,
+"f1": 0.6274389621003167
+
 """
 
 if __name__ == "__main__":

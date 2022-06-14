@@ -505,6 +505,45 @@ p q_main.py \
 "f1": 0.6418079096045198
 
 p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20_seed_1 \
+--data_dir data/q10 \
+--seed 1 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6541560227942621,
+"recall": 0.622126705288731, 
+"f1": 0.6377394636015326
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20_seed_2 \
+--data_dir data/q10 \
+--seed 2 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6515906477577615,
+"recall": 0.6353952532236965,
+"f1": 0.6433910492951084
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20_seed_3 \
+--data_dir data/q10 \
+--seed 3 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6612085769980507,
+"recall": 0.6339002055690525,  
+"f1": 0.6472664822058964
+
+p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_40 \
 --data_dir data/q10 \
 --prune_topk 40 \
@@ -536,6 +575,24 @@ p q_main.py \
 --task triplet \
 --config_file q_config.yml
 
+p q_main.py \
+--seed 1 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_triplet_distilbert_seed_1 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_triplet_distilbert_seed_2 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
 ################################################################################
 Tagger task (10)
 
@@ -561,6 +618,24 @@ p q_main.py \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
 --save_dir ckpt/q10_tags_distilbert_seed_0 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 1 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_tags_distilbert_seed_1 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_tags_distilbert_seed_2 \
 --data_dir data/q10_tags \
 --task tagger \
 --config_file q_config.yml
