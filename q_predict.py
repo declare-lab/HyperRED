@@ -87,54 +87,37 @@ def eval_pipeline(
 
 """
 p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet \
---dir_tags ckpt/q10_tags \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-precision:   0.6987045549519432
-recall:      0.644315992292871
-f1:          0.6704089815557338
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet \
---dir_tags ckpt/q10_tags_freeze \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-precision:   0.5771947527749748
-recall:      0.44084778420038534
-f1:          0.49989075813851863
-
-p q_predict.py run_eval ckpt/double/q10_triplet/best_model ckpt/double/q10_triplet/dataset.pickle test --task triplet
-
-"precision": 0.7602870813397129,
-"recall": 0.6872837370242214,
-"f1": 0.7219445706497047
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/double/q10_triplet \
---dir_tags ckpt/double/q10_tags \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.7016129032258065,
-"recall": 0.6034682080924856,
-"f1": 0.6488502175264139
-
-p q_predict.py eval_pipeline \
 --dir_triplets ckpt/q10_triplet_distilbert/ \
 --dir_tags ckpt/q10_tags_distilbert/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
 
-"precision": 0.6905281536446967,
-"recall": 0.6096339113680154,
-"f1": 0.6475644699140402
+"precision": 0.6955640621481648,
+"recall": 0.5772752756494113,
+"f1": 0.6309232026143791
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert/ \
+--dir_tags ckpt/q10_tags_distilbert_no_decay/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6831530139103554,
+"recall": 0.5782096804335638,
+"f1": 0.6263157894736842
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_0/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_0/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6837302470509682,
+"recall": 0.5740982993832928,
+"f1": 0.6241365298659082
 
 """
 

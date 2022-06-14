@@ -442,32 +442,8 @@ def main():
 Distant supervised + filtered dev/test (10)
 
 p q_main.py \
---save_dir ckpt/q10_hidden_150_fix_q_loss \
---mlp_hidden_size 150 \
---train_batch_size 8 \
---gradient_accumulation_steps 4 \
---data_dir data/q10 \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6454475308641975,
-"recall": 0.6447013487475916,
-"f1": 0.6450742240215924
-
-p q_main.py \
---save_dir ckpt/q10_hidden_300_fix_q_loss \
---mlp_hidden_size 300 \
---train_batch_size 8 \
---gradient_accumulation_steps 4 \
---data_dir data/q10 \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6575500770416025,
-"recall": 0.6578034682080924,
-"f1": 0.6576767482180697
-
-p q_main.py \
+--train_batch_size 16 \
+--gradient_accumulation_steps 2 \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_0 \
 --data_dir data/q10 \
 --prune_topk 0 \
@@ -475,9 +451,9 @@ p q_main.py \
 --fix_q_loss \
 --config_file q_config.yml
 
-"precision": 0.6625742574257426,                                         
-"recall": 0.6447013487475916,                                            
-"f1": 0.653515625
+"precision": 0.6310109806891329,
+"recall": 0.6228742291160531,
+"f1": 0.6269162042697263
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_10 \
@@ -486,21 +462,10 @@ p q_main.py \
 --use_pair2_mlp \
 --fix_q_loss \
 --config_file q_config.yml
-                                                                                                                       
-"precision": 0.6751721344673957,                                                                                                                          "recall": 0.6423892100192679,                                                                                                                         
-"f1": 0.6583728278041073
 
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
---data_dir data/q10 \
---prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6719291490180979,
-"recall": 0.6724470134874759,
-"f1": 0.6721879815100154
+"precision": 0.655234297108674,
+"recall": 0.6140908241450196,         
+"f1": 0.6339957553540421
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_30 \
@@ -510,9 +475,34 @@ p q_main.py \
 --fix_q_loss \
 --config_file q_config.yml
 
-"precision": 0.6750499001996008,
-"recall": 0.6516377649325626,  
-"f1": 0.6631372549019608
+"precision": 0.6584119496855346,
+"recall": 0.6260512053821715,
+"f1": 0.6418239294951624
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20 \
+--data_dir data/q10 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6530335336305485,
+"recall": 0.629601943561951,
+"f1": 0.6411037107516651
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_fix_q_loss_prune_20_seed_0 \
+--data_dir data/q10 \
+--seed 0 \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6468020497248055,
+"recall": 0.6368903008783405,  
+"f1": 0.6418079096045198
 
 p q_main.py \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_40 \
@@ -521,71 +511,13 @@ p q_main.py \
 --use_pair2_mlp \
 --fix_q_loss \
 --config_file q_config.yml
-                                                                                                                      
-"precision": 0.6715686274509803,
-"recall": 0.6335260115606937,     
-"f1": 0.6519928613920285
 
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss \
---data_dir data/q10 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6717373899119295,                                                                                                                          "recall": 0.6466281310211947,                                                                                                                         
-"f1": 0.6589436481445121
-
-p q_main.py \
---save_dir ckpt/q10r_pair2_fix_q_loss \
---data_dir data/q10r \
---embedding_model pretrained \
---pretrained_model_name roberta-base \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6874216464688675,
-"recall": 0.6339113680154143,
-"f1": 0.6595829991980754
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_labeled_train_transfer \
---data_dir data/q10_labeled_train \
---load_weight_path ckpt/q10_pair2_fix_q_loss/best_model \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.696078431372549,
-"recall": 0.7029702970297029,
-"f1": 0.6995073891625616
-
-p q_main.py \
---save_dir ckpt/q10_pair2_fix_q_loss_triplet_biaffine_prune_20 \
---data_dir data/q10 \
---prune_topk 20 \
---use_triplet_biaffine \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-"precision": 0.6766325727773407,
-"recall": 0.6628131021194605,
-"f1": 0.6696515475958732
+"precision": 0.6546664057914302, 
+"recall": 0.6253036815548496,
+"f1": 0.6396482508124641
 
 ################################################################################
 Triplet task (10)
-
-p q_main.py \
---save_dir ckpt/q10_triplet \
---data_dir data/q10 \
---task triplet \
---config_file q_config.yml
-
-"precision": 0.7585431654676259,
-"recall": 0.7296712802768166,
-"f1": 0.7438271604938272
 
 p q_main.py \
 --embedding_model pretrained \
@@ -595,29 +527,26 @@ p q_main.py \
 --task triplet \
 --config_file q_config.yml
 
+p q_main.py \
+--seed 0 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_triplet_distilbert_seed_0 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
 ################################################################################
 Tagger task (10)
 
 p q_main.py \
---save_dir ckpt/q10_tags \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--lr_decay_rate 1.0 \
+--save_dir ckpt/q10_tags_distilbert_no_decay \
 --data_dir data/q10_tags \
 --task tagger \
 --config_file q_config.yml
-
-"precision": 0.8735722725482473,
-"recall": 0.8547206165703276,                                            
-"f1": 0.864043630697312
-
-p q_main.py \
---save_dir ckpt/q10_tags_freeze \
---data_dir data/q10_tags \
---freeze_bert \
---task tagger \
---config_file q_config.yml
-
-"precision": 0.6774675972083749,
-"recall": 0.5236994219653179,                                            
-"f1": 0.5907411432297328
 
 p q_main.py \
 --embedding_model pretrained \
@@ -627,18 +556,14 @@ p q_main.py \
 --task tagger \
 --config_file q_config.yml
 
-################################################################################
-Entity task (10)
-
 p q_main.py \
---save_dir ckpt/q10_entity \
---data_dir data/q10_entity \
+--seed 0 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--save_dir ckpt/q10_tags_distilbert_seed_0 \
+--data_dir data/q10_tags \
 --task tagger \
 --config_file q_config.yml
-
-"precision": 0.8726650062266501,
-"recall": 0.8715796019900498,                                            
-"f1": 0.8721219663970132
 
 """
 

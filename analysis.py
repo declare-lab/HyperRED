@@ -1,6 +1,7 @@
 import json
 import random
 from collections import Counter
+from pathlib import Path
 from pprint import pprint
 from typing import List
 
@@ -427,6 +428,14 @@ def test_tensor():
         x = torch.zeros_like(zero)
         # x = np.zeros(shape)
         assert x.shape == zero.shape
+
+
+def find_best(pattern: str = "ckpt/*prune*/train.log"):
+    for path in sorted(Path().glob(pattern)):
+        print(path)
+        with open(path) as f:
+            lines = [x for x in f.readlines() if "best_score" in x]
+            print(lines[-1])
 
 
 """
