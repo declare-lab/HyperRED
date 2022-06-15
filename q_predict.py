@@ -98,17 +98,6 @@ p q_predict.py eval_pipeline \
 "f1": 0.6309232026143791
 
 p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert/ \
---dir_tags ckpt/q10_tags_distilbert_no_decay/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.6831530139103554,
-"recall": 0.5782096804335638,
-"f1": 0.6263157894736842
-
-p q_predict.py eval_pipeline \
 --dir_triplets ckpt/q10_triplet_distilbert_seed_0/ \
 --dir_tags ckpt/q10_tags_distilbert_seed_0/ \
 --dir_data data/q10 \
@@ -142,37 +131,37 @@ p q_predict.py eval_pipeline \
 "f1": 0.6274389621003167
 
 p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_0/ \
---dir_tags ckpt/q10_tags_distilbert_no_decay_seed_0/ \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_3/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_3/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
 
-"precision": 0.6962196219621962,
-"recall": 0.5782096804335638,
-"f1": 0.6317508933129147
+"precision": 0.7093997208003723,
+"recall": 0.5698000373761913,
+"f1": 0.6319825888693129
 
 p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_1/ \
---dir_tags ckpt/q10_tags_distilbert_no_decay_seed_1/ \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_4/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_4/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
 
-"precision": 0.6819076788448917,
-"recall": 0.5825079424406653,
-"f1": 0.6283007458173756
+"precision": 0.7029948209862643,
+"recall": 0.5834423472248178,
+"f1": 0.6376633986928104
 
 p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_2/ \
---dir_tags ckpt/q10_tags_distilbert_no_decay_seed_2/ \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_5/ \
+--dir_tags ckpt/q10_tags_distilbert_seed_5/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
 
-"precision": 0.6989921612541993,
-"recall": 0.5832554662679873,
-"f1": 0.6359005704971475
+"precision": 0.6863971409425955,
+"recall": 0.5742851803401233,
+"f1": 0.6253561253561254
 
 """
 
