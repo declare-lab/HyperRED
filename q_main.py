@@ -606,6 +606,36 @@ p q_main.py \
 --config_file q_config.yml
 
 p q_main.py \
+--seed 0 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--lr_decay_rate 1.0 \
+--save_dir ckpt/q10_tags_distilbert_no_decay_seed_0 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 1 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--lr_decay_rate 1.0 \
+--save_dir ckpt/q10_tags_distilbert_no_decay_seed_1 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--lr_decay_rate 1.0 \
+--save_dir ckpt/q10_tags_distilbert_no_decay_seed_2 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
 --save_dir ckpt/q10_tags_distilbert \

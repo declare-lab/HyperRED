@@ -141,6 +141,39 @@ p q_predict.py eval_pipeline \
 "recall": 0.5739114184264623,
 "f1": 0.6274389621003167
 
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_0/ \
+--dir_tags ckpt/q10_tags_distilbert_no_decay_seed_0/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6962196219621962,
+"recall": 0.5782096804335638,
+"f1": 0.6317508933129147
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_1/ \
+--dir_tags ckpt/q10_tags_distilbert_no_decay_seed_1/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6819076788448917,
+"recall": 0.5825079424406653,
+"f1": 0.6283007458173756
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_distilbert_seed_2/ \
+--dir_tags ckpt/q10_tags_distilbert_no_decay_seed_2/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+"precision": 0.6989921612541993,
+"recall": 0.5832554662679873,
+"f1": 0.6359005704971475
+
 """
 
 if __name__ == "__main__":

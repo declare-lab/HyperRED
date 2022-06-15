@@ -447,6 +447,7 @@ Findings
 - Auxiliary entity seq labeling loss doesn't help (-4 F1)
 - Distant training then labeled continue train helps (+3 F1)
 - Cube-pruning helps
+- No decay helps for tagger, it may help cube model (+0.5 F1)
 
 Tasks
 - position embeddings
