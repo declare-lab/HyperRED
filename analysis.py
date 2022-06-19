@@ -1,3 +1,4 @@
+import ast
 import json
 import random
 from collections import Counter
@@ -7,6 +8,7 @@ from typing import List
 
 import numpy as np
 import torch
+import torch.nn as nn
 from fire import Fire
 from tqdm import tqdm
 from transformers.models.auto.modeling_auto import AutoModel
@@ -17,6 +19,7 @@ from inputs.datasets.q_dataset import Dataset
 from models.joint_decoding.q_decoder import (EntRelJointDecoder,
                                              decode_nonzero_cuboids)
 from models.joint_decoding.q_tagger import decode_nonzero_spans
+from modules.token_embedders.bert_encoder import BertLinear
 from q_main import evaluate
 
 
@@ -436,6 +439,66 @@ def find_best(pattern: str = "ckpt/*prune*/train.log"):
         with open(path) as f:
             lines = [x for x in f.readlines() if "best_score" in x]
             print(lines[-1])
+
+
+def test_adjacent_qualifiers(path: str = "data/q10/test.json"):
+    with open(path) as f:
+        sents = [Sentence(**json.loads(line)) for line in f]
+
+    total = 0
+    selected = 0
+    for s in sents:
+        groups = {}
+        for q in s.qualifierMentions:
+            groups.setdefault((q.em1Id, q.em2Id), []).append(q)
+        for lst in groups.values():
+            tags = [0 for _ in s.sentText.split()]
+            for q in lst:
+                span = ast.literal_eval(q.em3Id)
+                total += 1
+                for i in range(span[0], span[1]):
+                    if tags[i] == 1:
+                        selected += 1
+                        break
+                    tags[i] = 1
+    print(dict(frac=selected / total))
+
+
+class Biaffine(nn.Module):
+    def __init__(self, f1: int, f2: int, f_out: int):
+        super().__init__()
+        self.bilinear = nn.Bilinear(f1, f2, f_out, bias=False)
+        self.linear = BertLinear(f1 + f2, f_out, activation=nn.Identity())
+
+    def get_shapes(self, x1, x2):
+        assert len(x1.shape) == len(x2.shape)
+        shape = list(x1.shape)
+        for i, j in enumerate(x2.shape):
+            if shape[i] == 1:
+                shape[i] = j
+        return shape, shape[:-1] + [x2.shape[-1]]
+
+    def forward(self, x1, x2):
+        shape1, shape2 = self.get_shapes(x1, x2)
+        x1 = x1.expand(*shape1)
+        x2 = x2.expand(*shape2)
+        a = self.linear(torch.cat([x1, x2], dim=-1))
+        b = self.bilinear(x1, x2)
+        return a + b
+
+
+def test_biaffine():
+    bs = 32
+    length = 20
+    dim1 = 40
+    dim2 = 23
+    num_labels = 15
+
+    head = torch.zeros(bs, length, dim1).unsqueeze(2)
+    tail = torch.zeros(bs, length, dim2).unsqueeze(1)
+    layer = Biaffine(dim1, dim2, num_labels)
+    x = layer(head, tail)
+    print(dict(x=x.shape))
 
 
 """
