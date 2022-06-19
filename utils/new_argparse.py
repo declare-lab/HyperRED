@@ -108,6 +108,12 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
+            "--no_value_mlp",
+            "--no_value_mlp",
+            action="store_true",
+            help="no_value_mlp",
+        )
+        group.add(
             "--use_triplet_biaffine",
             "--use_triplet_biaffine",
             action="store_true",

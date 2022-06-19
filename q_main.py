@@ -439,6 +439,21 @@ def main():
 Distant supervised + filtered dev/test (10)
 
 p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.6598098195226082,
+"recall": 0.6353952532236965,
+"f1": 0.6473724295506473
+
+################################################################################
+
+p q_main.py \
 --train_batch_size 16 \
 --gradient_accumulation_steps 2 \
 --save_dir ckpt/q10_pair2_fix_q_loss_prune_0 \

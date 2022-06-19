@@ -167,6 +167,17 @@ class EntRelJointDecoder(nn.Module):
         )
         self.U.data.zero_()
 
+        if self.get_config("no_value_mlp"):
+            self.value_mlp = nn.Identity()
+            self.U = nn.parameter.Parameter(
+                torch.FloatTensor(
+                    ent_rel_file["q_num_logits"],
+                    cfg.mlp_hidden_size,
+                    self.encoder_output_size,
+                )
+            )
+            self.U.data.zero_()
+
         if self.get_config("use_triplet_biaffine"):
             self.X = nn.parameter.Parameter(
                 torch.FloatTensor(
