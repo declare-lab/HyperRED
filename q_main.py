@@ -16,7 +16,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from data.q_process import RawPred, Sentence, SparseCube
+from data.q_process import RawPred, SparseCube, load_sents
 from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
 from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField
@@ -59,11 +59,8 @@ def run_eval(
 
 
 def score_preds(path_pred: str, path_gold: str) -> dict:
-    with open(path_pred) as f:
-        preds = [Sentence(**json.loads(line)) for line in f]
-    with open(path_gold) as f:
-        sents = [Sentence(**json.loads(line)) for line in f]
-
+    preds = load_sents(path_pred)
+    sents = load_sents(path_gold)
     results = {}
     for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
         results[scorer.name] = scorer.run(preds, sents)

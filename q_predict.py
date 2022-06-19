@@ -5,7 +5,7 @@ from typing import List
 
 from fire import Fire
 
-from data.q_process import Qualifier, Sentence, process
+from data.q_process import Qualifier, Sentence, process, save_sents
 from q_main import run_eval, score_preds
 from scoring import QuintupletScorer
 
@@ -76,7 +76,7 @@ def eval_pipeline(
     temp_tags = str(Path(dir_tags) / "pred.json")
     preds = merge_pipeline_preds(path_triplets=temp_triplets, path_tags=temp_tags)
     os.remove(temp_tags_in)
-    os.remove(temp_tags)
+    save_sents(preds, temp_tags)
 
     with open(Path(dir_data) / f"{data_split}.json") as f:
         sents = [Sentence(**json.loads(line)) for line in f]
