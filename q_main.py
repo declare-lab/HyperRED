@@ -451,6 +451,83 @@ p q_main.py \
 "recall": 0.6353952532236965,
 "f1": 0.6473724295506473
 
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20_seed_0 \
+--seed 0 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20_seed_1 \
+--seed 1 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20_seed_2 \
+--seed 2 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20_seed_3 \
+--seed 3 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_20_seed_4 \
+--seed 4 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_10 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 10 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_30 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 30 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_pair2_no_value_prune_40 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 40 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
 ################################################################################
 
 p q_main.py \
