@@ -436,6 +436,61 @@ def main():
 
 """
 ################################################################################
+Analysis for different train sizes
+
+p q_main.py \
+--save_dir ckpt/q10_truncate_20 \
+--data_dir data/q10_truncate_20 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.4746916988772317,
+"recall": 0.48196598766585685,
+"f1": 0.47830118694362017
+
+p q_main.py \
+--save_dir ckpt/q10_truncate_40 \
+--data_dir data/q10_truncate_40 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.5670259028171677,
+"recall": 0.5604559895346665,   
+"f1": 0.5637218045112782
+
+p q_main.py \
+--save_dir ckpt/q10_truncate_60 \
+--data_dir data/q10_truncate_60 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.579250720461095,
+"recall": 0.6010091571668847, 
+"f1": 0.5899293772356232
+
+p q_main.py \
+--save_dir ckpt/q10_truncate_80 \
+--data_dir data/q10_truncate_80 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+                            
+"precision": 0.6501578531965272,
+"recall": 0.6157727527564941,  
+"f1": 0.6324983203762357
+
+################################################################################
 Distant supervised + filtered dev/test (10)
 
 p q_main.py \

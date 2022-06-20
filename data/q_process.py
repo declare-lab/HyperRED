@@ -641,6 +641,18 @@ def test_bio():
     assert spans == preds
 
 
+def truncate_train(folder_in: str, folder_out: str, fraction: float):
+    if Path(folder_out).exists():
+        shutil.rmtree(folder_out)
+    shutil.copytree(folder_in, folder_out)
+    path = str(Path(folder_out) / "train.json")
+    sents = load_sents(path)
+    assert 0.0 < fraction < 1.0
+    sents = sents[: round(len(sents) * fraction)]
+    print(dict(path=path, sents=len(sents)))
+    save_sents(sents, path)
+
+
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
@@ -648,6 +660,11 @@ p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q1
 p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_entity/ --mode entity
+
+p data/q_process.py truncate_train data/q10/ data/q10_truncate_20 0.2
+p data/q_process.py truncate_train data/q10/ data/q10_truncate_40 0.4
+p data/q_process.py truncate_train data/q10/ data/q10_truncate_60 0.6
+p data/q_process.py truncate_train data/q10/ data/q10_truncate_80 0.8
 
 """
 
