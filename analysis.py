@@ -1,5 +1,6 @@
 import ast
 import json
+import os
 import random
 from collections import Counter
 from pathlib import Path
@@ -14,13 +15,14 @@ from tqdm import tqdm
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import Sentence, SparseCube, load_raw_preds
+from data.q_process import (Sentence, SparseCube, load_raw_preds, load_sents,
+                            save_sents)
 from inputs.datasets.q_dataset import Dataset
 from models.joint_decoding.q_decoder import (EntRelJointDecoder,
                                              decode_nonzero_cuboids)
 from models.joint_decoding.q_tagger import decode_nonzero_spans
 from modules.token_embedders.bert_encoder import BertLinear
-from q_main import evaluate
+from q_main import evaluate, score_preds
 
 
 def test_lengths(
@@ -499,6 +501,47 @@ def test_biaffine():
     layer = Biaffine(dim1, dim2, num_labels)
     x = layer(head, tail)
     print(dict(x=x.shape))
+
+
+def test_ign_score(
+    path_pred: str = "ckpt/q10_pair2_fix_q_loss_prune_20/test.json",
+    path_gold: str = "data/q10/test.json",
+    path_train: str = "data/q10/train.json",
+):
+    # score_preds(path_pred, path_gold)
+    preds = load_sents(path_pred)
+    sents = load_sents(path_gold)
+
+    facts = set(
+        q.as_texts(s.tokens, s.relationMentions)
+        for s in load_sents(path_train)
+        for q in s.qualifierMentions
+    )
+
+    for s in sents:
+        s.qualifierMentions = [
+            q
+            for q in s.qualifierMentions
+            if q.as_texts(s.tokens, s.relationMentions) not in facts
+        ]
+
+    for s in preds:
+        s.qualifierMentions = [
+            q
+            for q in s.qualifierMentions
+            if q.as_texts(s.tokens, s.relationMentions) not in facts
+        ]
+
+    save_sents(sents, "temp_gold.json")
+    save_sents(preds, "temp_pred.json")
+    score_preds("temp_pred.json", "temp_gold.json")
+    os.remove("temp_pred.json")
+    os.remove("temp_gold.json")
+
+
+# "precision": 0.5429590996431513,
+# "recall": 0.5486823855755895,
+# "f1": 0.5458057395143487
 
 
 """
