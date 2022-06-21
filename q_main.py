@@ -436,6 +436,54 @@ def main():
 
 """
 ################################################################################
+Analysis for partially replaced train with test
+
+p q_main.py \
+--save_dir ckpt/q10_replace_20 \
+--data_dir data/q10_replace_20 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_replace_40 \
+--data_dir data/q10_replace_40 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_replace_60 \
+--data_dir data/q10_replace_60 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_replace_80 \
+--data_dir data/q10_replace_80 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--save_dir ckpt/q10_replace_100 \
+--data_dir data/q10_replace_100 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+################################################################################
 Analysis for different train sizes
 
 p q_main.py \
@@ -489,6 +537,64 @@ p q_main.py \
 "precision": 0.6501578531965272,
 "recall": 0.6157727527564941,  
 "f1": 0.6324983203762357
+
+################################################################################
+BERT-Large
+
+p q_main.py \
+--bert_model_name bert-large-uncased \
+--save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_0 \
+--seed 0 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--bert_model_name bert-large-uncased \
+--save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_1 \
+--seed 1 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--bert_model_name bert-large-uncased \
+--save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_2 \
+--seed 2 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--bert_model_name bert-large-uncased \
+--save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_3 \
+--seed 3 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--bert_model_name bert-large-uncased \
+--save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_4 \
+--seed 4 \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
 
 ################################################################################
 Distant supervised + filtered dev/test (10)

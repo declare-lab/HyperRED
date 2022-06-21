@@ -642,6 +642,7 @@ def test_bio():
 
 
 def truncate_train(folder_in: str, folder_out: str, fraction: float):
+    """Keep only a fraction of original train size"""
     if Path(folder_out).exists():
         shutil.rmtree(folder_out)
     shutil.copytree(folder_in, folder_out)
@@ -649,6 +650,20 @@ def truncate_train(folder_in: str, folder_out: str, fraction: float):
     sents = load_sents(path)
     assert 0.0 < fraction < 1.0
     sents = sents[: round(len(sents) * fraction)]
+    print(dict(path=path, sents=len(sents)))
+    save_sents(sents, path)
+
+
+def replace_train(folder_in: str, folder_out: str):
+    """Replace some train samples with test samples"""
+    if Path(folder_out).exists():
+        shutil.rmtree(folder_out)
+    shutil.copytree(folder_in, folder_out)
+    path = str(Path(folder_out) / "train.json")
+    sents = load_sents(path)
+    gold = load_sents(str(Path(folder_out) / "test.json"))
+    assert len(sents) > len(gold)
+    sents = sents[len(gold) :] + gold
     print(dict(path=path, sents=len(sents)))
     save_sents(sents, path)
 
@@ -665,6 +680,12 @@ p data/q_process.py truncate_train data/q10/ data/q10_truncate_20 0.2
 p data/q_process.py truncate_train data/q10/ data/q10_truncate_40 0.4
 p data/q_process.py truncate_train data/q10/ data/q10_truncate_60 0.6
 p data/q_process.py truncate_train data/q10/ data/q10_truncate_80 0.8
+
+p data/q_process.py replace_train data/q10_truncate_20 data/q10_replace_20
+p data/q_process.py replace_train data/q10_truncate_40 data/q10_replace_40
+p data/q_process.py replace_train data/q10_truncate_60 data/q10_replace_60
+p data/q_process.py replace_train data/q10_truncate_80 data/q10_replace_80
+p data/q_process.py replace_train data/q10 data/q10_replace_100
 
 """
 
