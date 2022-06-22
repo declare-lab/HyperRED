@@ -544,6 +544,74 @@ def test_ign_score(
 # "f1": 0.5458057395143487
 
 
+def find_words(text: str, words: List[str]) -> bool:
+    return any(w in text for w in words)
+
+
+def classify_qualifier(label: str, value: str) -> str:
+    if find_words(label, ["time", "date"]):
+        return "time"
+    if value.isdigit() or find_words(
+        label, "ordinal number quantity ranking appearances proportion level".split()
+    ):
+        return "number"
+    if find_words(
+        label,
+        "together part separated represent league instance affiliation member replace follow".split(),
+    ):
+        return "part-whole"
+    if label == "of" or find_words(
+        label, "adjacent connect locat district country towards diocese".split()
+    ):
+        return "location"
+    # if find_words(
+    #     label,
+    #     "replace follow degree statement cause work major member use".split(),
+    # ):
+    #     return "cause"
+    if find_words(
+        label,
+        "mother nominee winner performer position role academic work operator statement father".split(),
+    ):
+        return "role"
+    return "others"
+
+
+def filter_qualifiers(s: Sentence, label: str) -> Sentence:
+    s = s.copy(deep=True)
+    mentions = []
+    for q in s.qualifierMentions:
+        _, _, _, qualifier, value = q.as_texts(s.tokens, s.relationMentions)
+        if classify_qualifier(qualifier, value) == label:
+            mentions.append(q)
+    s.qualifierMentions = mentions
+    return s
+
+
+def test_separate_eval(path_pred: str, path_gold: str):
+    path_temp_pred = "temp_pred.json"
+    path_temp_gold = "temp_gold.json"
+    sents_pred = load_sents(path_pred)
+    sents_gold = load_sents(path_gold)
+
+    records = []
+    for label in "location time number part-whole role".split():
+        # pred = sents_pred
+        # gold = sents_gold
+        pred = [filter_qualifiers(s, label) for s in sents_pred]
+        gold = [filter_qualifiers(s, label) for s in sents_gold]
+        save_sents(pred, path_temp_pred)
+        save_sents(gold, path_temp_gold)
+        r = score_preds(path_temp_pred, path_temp_gold)
+        r = dict(label=label, score=r["quintuplet"]["f1"])
+        records.append(r)
+
+        os.remove(path_temp_pred)
+        os.remove(path_temp_gold)
+        for r in records:
+            print(r)
+
+
 """
 Findings
 - FP16 doesn't significantly change speed or results
@@ -557,6 +625,27 @@ Findings
 
 Tasks
 - position embeddings
+
+p analysis.py test_separate_eval ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
+{'label': 'location', 'score': 0.5505984766050054}
+{'label': 'time', 'score': 0.623048033208144}    
+{'label': 'number', 'score': 0.7924528301886793}
+{'label': 'part-whole', 'score': 0.751417004048583}
+{'label': 'role', 'score': 0.523168908819133}
+
+p analysis.py test_separate_eval ckpt/q10_tags_distilbert_seed_0/pred.json data/q10/test.json
+{'label': 'location', 'score': 0.5080091533180778}
+{'label': 'time', 'score': 0.5956365176869308}
+{'label': 'number', 'score': 0.7781672508763143}
+{'label': 'part-whole', 'score': 0.7060931899641578}
+{'label': 'role', 'score': 0.4806338028169014}
+
+p analysis.py test_separate_eval data/q10/gen_pred.json data/q10/test.json
+{'label': 'location', 'score': 0.5340659340659342}
+{'label': 'time', 'score': 0.5808540781218376}
+{'label': 'number', 'score': 0.765371372356124}
+{'label': 'part-whole', 'score': 0.6255430060816682}
+{'label': 'role', 'score': 0.5331230283911672}
 
 """
 

@@ -687,6 +687,7 @@ p data/q_process.py replace_train data/q10_truncate_60 data/q10_replace_60
 p data/q_process.py replace_train data/q10_truncate_80 data/q10_replace_80
 p data/q_process.py replace_train data/q10 data/q10_replace_100
 
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
 """
 
 
