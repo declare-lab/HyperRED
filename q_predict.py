@@ -163,6 +163,23 @@ p q_predict.py eval_pipeline \
 "recall": 0.5742851803401233,
 "f1": 0.6253561253561254
 
+################################################################################
+Triplet Scores
+
+p q_predict.py score_preds ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
+"precision": 0.7252410166520596,
+"recall": 0.6974294142435735,  
+"f1": 0.7110633727175081
+
+p q_predict.py score_preds ckpt/q10_tags_distilbert_seed_0/pred.json data/q10/test.json
+"precision": 0.7587951807228915,
+"recall": 0.6635061104087653,
+"f1": 0.7079586330935252
+
+p q_predict.py score_preds data/q10/gen_pred.json data/q10/test.json
+"precision": 0.6971830985915493,             
+"recall": 0.6466498103666245,                                                                                    "f1": 0.6709663314385658
+
 """
 
 if __name__ == "__main__":
