@@ -5,12 +5,13 @@ import random
 from collections import Counter
 from pathlib import Path
 from pprint import pprint
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 from fire import Fire
+from pydantic.main import BaseModel
 from tqdm import tqdm
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
@@ -612,6 +613,141 @@ def test_separate_eval(path_pred: str, path_gold: str):
             print(r)
 
 
+class TacredSentence(BaseModel):
+    id: str
+    docid: str
+    relation: str
+    token: List[str]
+    subj_start: int
+    subj_end: int
+    obj_start: int
+    obj_end: int
+    subj_type: str
+    obj_type: str
+
+    @property
+    def text(self) -> str:
+        return " ".join(self.token)
+
+    @property
+    def triplet_texts(self) -> Tuple[str, str, str]:
+        head = " ".join(self.token[self.subj_start : self.subj_end + 1])
+        tail = " ".join(self.token[self.obj_start : self.obj_end + 1])
+        return (head, self.relation, tail)
+
+
+class TacredData(BaseModel):
+    sents: List[TacredSentence]
+
+    @classmethod
+    def load(cls, path: str):
+        with open(path) as f:
+            sents = [TacredSentence(**raw) for raw in tqdm(json.load(f), desc=path)]
+        return cls(sents=sents)
+
+    def analyze(self):
+        info = dict(sents=len(self.sents), texts=len(set(s.text for s in self.sents)))
+        print(json.dumps(info, indent=2))
+
+
+def test_tacred(pattern: str = "data/tacred/data/json/*.json"):
+    facts = []
+
+    for path in sorted(Path().glob(pattern)):
+        print(path)
+        data = TacredData.load(str(path))
+        data.analyze()
+        for s in data.sents:
+            facts.append(s.triplet_texts)
+
+    print(facts[:10])
+    print(dict(unique_facts=len(set(facts))))
+
+
+class NytSentence(BaseModel):
+    text: str
+    pointer: str
+
+    @property
+    def tokens(self) -> List[str]:
+        return self.text.split()
+
+    @property
+    def triplets(self) -> List[Tuple[int, int, int, int, str]]:
+        triplets = []
+        parts = self.pointer.split(" | ")
+        for p in parts:
+            a, b, c, d, e = p.split()
+            triplets.append((int(a), int(b), int(c), int(d), e))
+        return triplets
+
+    @property
+    def triplet_texts(self) -> List[Tuple[str, str, str]]:
+        tokens = self.tokens
+        texts = []
+        for a, b, c, d, e in self.triplets:
+            head = " ".join(tokens[a : b + 1])
+            tail = " ".join(tokens[c : d + 1])
+            texts.append((head, e, tail))
+        return texts
+
+
+class NytData(BaseModel):
+    sents: List[NytSentence]
+
+    @classmethod
+    def load(cls, path_text: str, path_pointer: str):
+        with open(path_text) as f:
+            texts = [line.strip() for line in f]
+        with open(path_pointer) as f:
+            pointers = [line.strip() for line in f]
+        assert len(texts) == len(pointers)
+        return cls(
+            sents=[NytSentence(text=t, pointer=p) for t, p in zip(texts, pointers)]
+        )
+
+    def analyze(self):
+        info = dict(
+            sents=len(self.sents),
+            facts=sum(len(s.triplets) for s in self.sents),
+            texts=len(set(s.text for s in self.sents)),
+        )
+        print(json.dumps(info, indent=2))
+
+
+def test_nyt_data(pattern: str = "data/PtrNetDecoding4JERE/*"):
+    for folder in sorted(Path().glob(pattern)):
+        if not folder.is_dir():
+            continue
+        facts = []
+        for data_split in "train dev test".split():
+            path_text = str(folder / f"{data_split}.sent")
+            path_pointer = str(folder / f"{data_split}.pointer")
+            data = NytData.load(path_text, path_pointer)
+            print(path_text)
+            data.analyze()
+
+            for s in data.sents:
+                for t in s.triplet_texts:
+                    facts.append(t)
+
+        print(facts[:10])
+        print(dict(unique_facts=len(set(facts))))
+        print("#" * 80)
+
+
+def test_unique_facts(folder: str = "data/q10"):
+    facts = []
+    for data_split in "train dev test".split():
+        path = Path(folder) / f"{data_split}.json"
+        sents = load_sents(str(path))
+        for s in sents:
+            for q in s.qualifierMentions:
+                facts.append(q.as_texts(s.tokens, s.relationMentions))
+
+    print(dict(unique_facts=len(set(facts))))
+
+
 """
 Findings
 - FP16 doesn't significantly change speed or results
@@ -627,25 +763,25 @@ Tasks
 - position embeddings
 
 p analysis.py test_separate_eval ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
-{'label': 'location', 'score': 0.5505984766050054}
 {'label': 'time', 'score': 0.623048033208144}    
 {'label': 'number', 'score': 0.7924528301886793}
-{'label': 'part-whole', 'score': 0.751417004048583}
 {'label': 'role', 'score': 0.523168908819133}
+{'label': 'part-whole', 'score': 0.751417004048583}
+{'label': 'location', 'score': 0.5505984766050054}
 
 p analysis.py test_separate_eval ckpt/q10_tags_distilbert_seed_0/pred.json data/q10/test.json
-{'label': 'location', 'score': 0.5080091533180778}
 {'label': 'time', 'score': 0.5956365176869308}
 {'label': 'number', 'score': 0.7781672508763143}
-{'label': 'part-whole', 'score': 0.7060931899641578}
 {'label': 'role', 'score': 0.4806338028169014}
+{'label': 'part-whole', 'score': 0.7060931899641578}
+{'label': 'location', 'score': 0.5080091533180778}
 
 p analysis.py test_separate_eval data/q10/gen_pred.json data/q10/test.json
-{'label': 'location', 'score': 0.5340659340659342}
 {'label': 'time', 'score': 0.5808540781218376}
 {'label': 'number', 'score': 0.765371372356124}
-{'label': 'part-whole', 'score': 0.6255430060816682}
 {'label': 'role', 'score': 0.5331230283911672}
+{'label': 'part-whole', 'score': 0.6255430060816682}
+{'label': 'location', 'score': 0.5340659340659342}
 
 """
 

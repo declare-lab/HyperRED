@@ -1,4 +1,6 @@
 temp/
+data/PtrNetDecoding4JERE/   
+data/tacred/
 data/*/*.json
 data/*/*/*.json
 pyrightconfig.json
