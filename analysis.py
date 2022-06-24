@@ -740,15 +740,28 @@ def test_nyt_data(pattern: str = "data/PtrNetDecoding4JERE/*"):
 
 
 def test_unique_facts(folder: str = "data/q10"):
-    facts = []
     for data_split in "train dev test".split():
         path = Path(folder) / f"{data_split}.json"
         sents = load_sents(str(path))
-        for s in sents:
-            for q in s.qualifierMentions:
-                facts.append(q.as_texts(s.tokens, s.relationMentions))
+        facts = []
+        entities = []
+        lengths = []
 
-    print(dict(unique_facts=len(set(facts))))
+        for s in sents:
+            lengths.append(len(s.tokens))
+            for q in s.qualifierMentions:
+                f = q.as_texts(s.tokens, s.relationMentions)
+                facts.append(f)
+                entities.append(f[0])
+                entities.append(f[2])
+                entities.append(f[4])
+
+        info = dict(
+            facts=len(set(facts)),
+            entities=len(set(entities)),
+            lengths=sum(lengths) / len(lengths),
+        )
+        print(json.dumps(info, indent=2))
 
 
 def sent_to_tuples(s: Sentence) -> Set[Tuple[str, str, str, str, str]]:
