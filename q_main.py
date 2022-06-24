@@ -819,6 +819,96 @@ p q_main.py \
 --task tagger \
 --config_file q_config.yml
 
+################################################################################
+Tagger task base
+
+p q_main.py \
+--seed 0 \
+--save_dir ckpt/q10_tags_seed_0 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 1 \
+--save_dir ckpt/q10_tags_seed_1 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--save_dir ckpt/q10_tags_seed_2 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 3 \
+--save_dir ckpt/q10_tags_seed_3 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 4 \
+--save_dir ckpt/q10_tags_seed_4 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 5 \
+--save_dir ckpt/q10_tags_seed_5 \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+################################################################################
+Triplet task base
+
+p q_main.py \
+--seed 0 \
+--save_dir ckpt/q10_triplet_seed_0 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 1 \
+--save_dir ckpt/q10_triplet_seed_1 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--save_dir ckpt/q10_triplet_seed_2 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 3 \
+--save_dir ckpt/q10_triplet_seed_3 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 4 \
+--save_dir ckpt/q10_triplet_seed_4 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 5 \
+--save_dir ckpt/q10_triplet_seed_5 \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
 """
 
 

@@ -207,6 +207,37 @@ test
 Tagger: 4s for 4k samples, 1.8GB
 Generative: 107s for 4k samples, 3.9GB
 
+################################################################################
+Eval pipeline base
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_seed_0/ \
+--dir_tags ckpt/q10_tags_seed_0/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_seed_1/ \
+--dir_tags ckpt/q10_tags_seed_1/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_seed_2/ \
+--dir_tags ckpt/q10_tags_seed_2/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_seed_3/ \
+--dir_tags ckpt/q10_tags_seed_3/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
 """
 
 if __name__ == "__main__":
