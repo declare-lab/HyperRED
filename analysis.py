@@ -5,7 +5,7 @@ import random
 from collections import Counter
 from pathlib import Path
 from pprint import pprint
-from typing import List, Tuple
+from typing import List, Set, Tuple
 
 import numpy as np
 import torch
@@ -24,6 +24,7 @@ from models.joint_decoding.q_decoder import (EntRelJointDecoder,
 from models.joint_decoding.q_tagger import decode_nonzero_spans
 from modules.token_embedders.bert_encoder import BertLinear
 from q_main import evaluate, score_preds
+from scoring import QuintupletScorer
 
 
 def test_lengths(
@@ -746,6 +747,67 @@ def test_unique_facts(folder: str = "data/q10"):
                 facts.append(q.as_texts(s.tokens, s.relationMentions))
 
     print(dict(unique_facts=len(set(facts))))
+
+
+def sent_to_tuples(s: Sentence) -> Set[Tuple[str, str, str, str, str]]:
+    return set(q.as_texts(s.tokens, s.relationMentions) for q in s.qualifierMentions)
+
+
+def test_cases(
+    path_cube: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/test.json",
+    path_pipe: str = "ckpt/q10_tags_distilbert_seed_0/pred.json",
+    path_gen: str = "data/q10/gen_pred.json",
+    path_gold: str = "data/q10/test.json",
+):
+    scorer = QuintupletScorer()
+    sents_gold = load_sents(path_gold)
+    sents_cube = scorer.match_gold_to_pred(load_sents(path_cube), sents_gold)
+    sents_pipe = scorer.match_gold_to_pred(load_sents(path_pipe), sents_gold)
+    sents_gen = scorer.match_gold_to_pred(load_sents(path_gen), sents_gold)
+
+    records = []
+    for i, s in enumerate(sents_gold):
+        gold = sent_to_tuples(s)
+        cube = sent_to_tuples(sents_cube[i])
+        pipe = sent_to_tuples(sents_pipe[i])
+        gen = sent_to_tuples(sents_gen[i])
+        if gold == cube and pipe == set() and gold != gen and pipe != gen:
+            info = dict(
+                text=s.sentText,
+                gold=str(gold),
+                cube=str(cube),
+                pipe=str(pipe),
+                gen=str(gen),
+            )
+            records.append(info)
+
+    records = sorted(records, key=lambda x: len(str(x)), reverse=True)
+    for info in records:
+        print(json.dumps(info, indent=2))
+    print(dict(records=len(records)))
+
+    """
+    {
+      "text": "Nancy Davis Reagan ( born Anne Frances Robbins , July 6 , 1921 ) is a former actress and 
+      the widow of the 40th President of the United States , Ronald Reagan .",                     
+      "gold": "{('Ronald', 'position held', 'President', 'series ordinal', '40th')}",
+      "cube": "{('Ronald', 'position held', 'President', 'series ordinal', '40th')}",
+      "pipe": "set()",                                                              
+      "gen": "{('Nancy Davis Reagan', 'spouse', 'Ronald', 'series ordinal', '40th')}"
+    }
+    {
+      "text": "Nancy Davis Reagan is a former actress and the widow of the 
+               40th President of the United States , Ronald Reagan .",                     
+      "gold": "{('Ronald', 'position held', 'President', 'series ordinal', '40th')}",
+      "cube": "{('Ronald', 'position held', 'President', 'series ordinal', '40th')}",
+      "pipe": "set()",                                                              
+      "gen": "{('Nancy Davis Reagan', 'spouse', 'Ronald', 'series ordinal', '40th')}"
+    }
+    The pipeline model is unable to detect the hyper-relational fact due to cascading errors
+    that impair the recall performance.
+    The generative model did not explicitly consider the interaction between relation triplet
+    and qualifier, hence it predicted an invalid hyper-relational fact.
+    """
 
 
 """
