@@ -180,6 +180,33 @@ p q_predict.py score_preds data/q10/gen_pred.json data/q10/test.json
 "precision": 0.6971830985915493,             
 "recall": 0.6466498103666245,                                                                                    "f1": 0.6709663314385658
 
+################################################################################
+Model speed comparison
+
+p q_predict.py run_eval \
+ckpt/q10_pair2_no_value_prune_20_seed_0/best_model \
+ckpt/q10_pair2_no_value_prune_20_seed_0/dataset.pickle \
+test
+
+Cube: 25s for 4k samples, 6.6GB
+
+p q_predict.py run_eval \
+ckpt/q10_triplet_distilbert_seed_0/best_model \
+ckpt/q10_triplet_distilbert_seed_0/dataset.pickle \
+--task triplet \
+test
+
+Triplet: 18s for 4k samples, 3.7GB
+
+p q_predict.py run_eval \
+ckpt/q10_tags_distilbert_seed_0/best_model \
+ckpt/q10_tags_distilbert_seed_0/dataset.pickle \
+--task tagger \
+test
+
+Tagger: 4s for 4k samples, 1.8GB
+Generative: 107s for 4k samples, 3.9GB
+
 """
 
 if __name__ == "__main__":
