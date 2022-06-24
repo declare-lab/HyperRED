@@ -12,18 +12,20 @@ import torch
 import torch.nn as nn
 from fire import Fire
 from pydantic.main import BaseModel
+from torch.nn.functional import one_hot
 from tqdm import tqdm
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import (Sentence, SparseCube, load_raw_preds, load_sents,
-                            save_sents)
+from data.q_process import (RawPred, Sentence, SparseCube, load_raw_preds,
+                            load_sents, save_sents)
 from inputs.datasets.q_dataset import Dataset
 from models.joint_decoding.q_decoder import (EntRelJointDecoder,
                                              decode_nonzero_cuboids)
 from models.joint_decoding.q_tagger import decode_nonzero_spans
 from modules.token_embedders.bert_encoder import BertLinear
-from q_main import evaluate, score_preds
+from q_main import (evaluate, load_model, prepare_inputs, process_outputs,
+                    score_preds)
 from scoring import QuintupletScorer
 
 
@@ -808,6 +810,53 @@ def test_cases(
     The generative model did not explicitly consider the interaction between relation triplet
     and qualifier, hence it predicted an invalid hyper-relational fact.
     """
+
+
+def test_decoding(
+    path: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/best_model",
+    path_data: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/dataset.pickle",
+    path_gold: str = "data/q10/test.json",
+    data_split: str = "test",
+    task: str = "quintuplet",
+    path_in: str = "",
+):
+    model = load_model(task, path)
+    dataset = Dataset.load(path_data)
+    cfg = model.cfg
+    all_outputs = []
+
+    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    for _, batch in tqdm(
+        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
+    ):
+        inputs = prepare_inputs(batch, cfg.device)
+        num_r = model.vocab.get_vocab_size("ent_rel_id")
+        num_q = model.ent_rel_file["q_num_logits"]
+        q_scores = one_hot(inputs["quintuplet_matrix"], num_q).float()
+        r_scores = one_hot(inputs["joint_label_matrix"], num_r).float()
+        batch_seq_tokens_lens = inputs["tokens_lens"]
+        assert isinstance(model, EntRelJointDecoder)
+
+        outputs = model.soft_joint_decoding(
+            batch_normalized_joint_score=r_scores,
+            batch_seq_tokens_lens=batch_seq_tokens_lens,
+            batch_normalized_q_score=q_scores,
+            prune_indices=None,
+        )
+        outputs.update(
+            quintuplet_preds=inputs["quintuplet_matrix"],
+            joint_label_preds=inputs["joint_label_matrix"],
+        )
+        all_outputs.extend(process_outputs(inputs, outputs))
+
+    sents = [RawPred(**r).as_sentence(model.vocab) for r in all_outputs]
+    save_sents(sents, "temp.json")
+    score_preds("temp.json", path_gold)
+    os.remove("temp.json")
+
+    # "precision": 0.9992310649750096,
+    # "recall": 0.9714072136049337,
+    # "f1": 0.9851227139202122
 
 
 """
