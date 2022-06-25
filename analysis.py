@@ -746,6 +746,7 @@ def test_unique_facts(folder: str = "data/q10"):
         facts = []
         entities = []
         lengths = []
+        ent_lengths = []
 
         for s in sents:
             lengths.append(len(s.tokens))
@@ -755,11 +756,16 @@ def test_unique_facts(folder: str = "data/q10"):
                 entities.append(f[0])
                 entities.append(f[2])
                 entities.append(f[4])
+            for e in s.entityMentions:
+                start, end = e.offset
+                assert start < end
+                ent_lengths.append(end - start)
 
         info = dict(
             facts=len(set(facts)),
             entities=len(set(entities)),
             lengths=sum(lengths) / len(lengths),
+            ent_lengths=np.mean(ent_lengths),
         )
         print(json.dumps(info, indent=2))
 
