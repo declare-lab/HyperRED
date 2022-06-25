@@ -80,7 +80,8 @@ class EntityScorer(StrictScorer):
     name: str = "entity"
 
     def make_sent_tuples(self, s: Sentence) -> List[Tuple[int, int, str]]:
-        return [(e.offset[0], e.offset[1], e.label) for e in s.entityMentions]
+        tuples = [(e.offset[0], e.offset[1], e.label) for e in s.entityMentions]
+        return sorted(set(tuples))
 
 
 class QuintupletScorer(StrictScorer):

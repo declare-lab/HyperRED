@@ -7,7 +7,7 @@ from fire import Fire
 
 from data.q_process import Qualifier, Sentence, process, save_sents
 from q_main import run_eval, score_preds
-from scoring import QuintupletScorer
+from scoring import EntityScorer, QuintupletScorer, StrictScorer
 
 assert run_eval is not None
 assert score_preds is not None
@@ -80,8 +80,10 @@ def eval_pipeline(
 
     with open(Path(dir_data) / f"{data_split}.json") as f:
         sents = [Sentence(**json.loads(line)) for line in f]
-    scorer = QuintupletScorer()
-    results = scorer.run(preds, sents)
+
+    results = {}
+    for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
+        results[scorer.name] = scorer.run(preds, sents)
     print(json.dumps(results, indent=2))
 
 
@@ -237,6 +239,16 @@ p q_predict.py eval_pipeline \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
+
+p q_predict.py score_preds \
+ckpt/q10_pair2_no_value_prune_20_seed_0/test.json \
+data/q10/test.json
+
+p q_predict.py score_preds data/q10/gen_pred.json data/q10/test.json
+p q_predict.py score_preds data/q10/gen_1.json data/q10/test.json
+p q_predict.py score_preds data/q10/gen_2.json data/q10/test.json
+p q_predict.py score_preds data/q10/gen_3.json data/q10/test.json
+p q_predict.py score_preds data/q10/gen_4.json data/q10/test.json
 
 """
 

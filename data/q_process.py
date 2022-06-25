@@ -688,6 +688,10 @@ p data/q_process.py replace_train data/q10_truncate_80 data/q10_replace_80
 p data/q_process.py replace_train data/q10 data/q10_replace_100
 
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_1.json data/q10/gen_1.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_2.json data/q10/gen_2.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_3.json data/q10/gen_3.json
+p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_4.json data/q10/gen_4.json
 """
 
 
