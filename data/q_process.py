@@ -3,8 +3,9 @@ import pickle
 import random
 import shutil
 from ast import literal_eval
+from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import fire
 import numpy as np
@@ -668,6 +669,82 @@ def replace_train(folder_in: str, folder_out: str):
     save_sents(sents, path)
 
 
+def transfer_sents(
+    a: List[Sentence],
+    b: List[Sentence],
+    limit: int,
+    count_fn: Callable[[Sentence], int],
+):
+    """Transfer num sents from a to b based on conditional check_fn"""
+    exclude = set()
+    count = 0
+    for s in a:
+        num = count_fn(s)
+        if num > 0 and count < limit:
+            b.append(s)
+            exclude.add(s.sentText)
+            count += num
+    a = [s for s in a if s.sentText not in exclude]
+    return a, b
+
+
+def analyze_sents(sents: List[Sentence]):
+    info = dict(
+        sents=len(sents),
+        relations=len(set(r.label for s in sents for r in s.relationMentions)),
+        qualifiers=len(set(q.label for s in sents for q in s.qualifierMentions)),
+    )
+    print(json.dumps(info, indent=2))
+
+
+def clean_dev_test(folder_in: str, folder_out: str, num_dev: int, num_test: int):
+    """Ensure number of samples and relations and qualifiers are balanced"""
+    if Path(folder_out).exists():
+        shutil.rmtree(folder_out)
+    shutil.copytree(folder_in, folder_out)
+    path_dev = str(Path(folder_out) / "dev.json")
+    path_test = str(Path(folder_out) / "test.json")
+    sents_dev = load_sents(path_dev)
+    sents_test = load_sents(path_test)
+    analyze_sents(sents_dev)
+    analyze_sents(sents_test)
+
+    qualifiers_dev = [q.label for s in sents_dev for q in s.qualifierMentions]
+    relations_dev = [q.label for s in sents_dev for q in s.relationMentions]
+    qualifiers_test = [q.label for s in sents_test for q in s.qualifierMentions]
+    relations_test = [q.label for s in sents_test for q in s.relationMentions]
+
+    for label in set(qualifiers_test).difference(qualifiers_dev):
+        count = Counter(qualifiers_test)[label]
+        num = round(count * num_dev / num_test)
+        sents_test, sents_dev = transfer_sents(
+            sents_test,
+            sents_dev,
+            num,
+            count_fn=lambda s: Counter(q.label for q in s.qualifierMentions)[label],
+        )
+
+    for label in set(relations_test).difference(relations_dev):
+        count = Counter(relations_test)[label]
+        num = round(count * num_dev / num_test)
+        sents_test, sents_dev = transfer_sents(
+            sents_test,
+            sents_dev,
+            num,
+            count_fn=lambda s: Counter(r.label for r in s.relationMentions)[label],
+        )
+
+    gap = num_test - len(sents_test)
+    print(dict(gap=gap))
+    assert gap > 0
+    sents_test.extend(sents_dev[:gap])
+    sents_dev = sents_dev[gap:]
+    analyze_sents(sents_dev)
+    analyze_sents(sents_test)
+    save_sents(sents_dev, path_dev)
+    save_sents(sents_test, path_test)
+
+
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
@@ -675,6 +752,8 @@ p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q1
 p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_entity/ --mode entity
+
+p data/q_process.py clean_dev_test data/q10 data/q10_balance --num_dev 1000 --num_test 4000
 
 p data/q_process.py truncate_train data/q10/ data/q10_truncate_20 0.2
 p data/q_process.py truncate_train data/q10/ data/q10_truncate_40 0.4
