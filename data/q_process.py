@@ -773,6 +773,15 @@ class AspectSentence(BaseModel):
             assert len(q.category) > 0
 
 
+def find_sublist_indices(items: list, query: list) -> List[int]:
+    indices = []
+    length = len(query)
+    for i in range(len(items) - length + 1):
+        if items[i : i + length] == query:
+            indices.append(i)
+    return indices
+
+
 class AspectData(BaseModel):
     sents: List[AspectSentence]
 
@@ -787,6 +796,8 @@ class AspectData(BaseModel):
             sents=len(self.sents),
             category=len(set(q.category for s in self.sents for q in s.quads)),
             counts=Counter(q.category for s in self.sents for q in s.quads),
+            quintuplets=sum(len(s.quads) for s in self.sents),
+            sents_no_quads=sum(len(s.quads) == 0 for s in self.sents),
         )
         print(json.dumps(info, indent=2))
 
@@ -804,6 +815,30 @@ class AspectData(BaseModel):
             )
             print(num / total)
 
+    def to_flat_quintuplets(self, path: str):
+        Path(path).parent.mkdir(exist_ok=True, parents=True)
+        total = 0
+        with open(path, "w") as f:
+            for s in self.sents:
+                for q in s.quads:
+                    tokens = " ".join(["NULL", s.text]).split()
+                    head = q.head.split()
+                    tail = q.tail.split()
+                    for i in find_sublist_indices(tokens, head):
+                        for j in find_sublist_indices(tokens, tail):
+                            flat = FlatQuintuplet(
+                                tokens=tokens,
+                                head=(i, i + len(head)),
+                                tail=(j, j + len(tail)),
+                                value=(0, 1),
+                                relation=q.sentiment,
+                                qualifier=q.category,
+                            )
+                            f.write(flat.json() + "\n")
+                            total += 1
+
+        print(dict(quads=sum(len(s.quads) for s in self.sents), lines=total))
+
 
 def test_aspect_data(path: str = "data/data_absa_quad/rest15/train.txt"):
     data = AspectData.load_txt(path)
@@ -811,6 +846,14 @@ def test_aspect_data(path: str = "data/data_absa_quad/rest15/train.txt"):
     for s in data.sents:
         s.assert_valid()
     breakpoint()
+
+
+def convert_aspect_data(folder_in: str, folder_out: str):
+    for path in sorted(Path(folder_in).glob("*.txt")):
+        data = AspectData.load_txt(str(path))
+        path_out = Path(folder_out, Path(path.name).with_suffix(".json"))
+        data.to_flat_quintuplets(str(path_out))
+        print(path_out)
 
 
 """
@@ -844,6 +887,12 @@ p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_s
 
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_tags/ --mode tags
+
+################################################################################
+
+p data/q_process.py convert_aspect_data data/data_absa_quad/rest15 data/flat_absa_quad/rest15
+p data/q_process.py process_many data/flat_absa_quad/rest15 data/rest15
+
 """
 
 

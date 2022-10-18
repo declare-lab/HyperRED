@@ -24,8 +24,7 @@ from inputs.fields.raw_token_field import RawTokenField
 from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.joint_decoder import \
-    EntRelJointDecoder as TripletModel
+from models.joint_decoding.joint_decoder import EntRelJointDecoder as TripletModel
 from models.joint_decoding.q_decoder import EntRelJointDecoder
 from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
@@ -983,6 +982,21 @@ p q_main.py \
 --data_dir data/q0 \
 --task triplet \
 --config_file q_config.yml
+
+################################################################################
+
+p q_main.py \
+--save_dir ckpt/rest15 \
+--data_dir data/rest15 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.35830212234706615,
+"recall": 0.35696517412935325,
+"f1": 0.35763239875389413  
 
 """
 
