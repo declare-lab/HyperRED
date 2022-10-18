@@ -745,6 +745,74 @@ def clean_dev_test(folder_in: str, folder_out: str, num_dev: int, num_test: int)
     save_sents(sents_test, path_test)
 
 
+class AspectQuad(BaseModel):
+    category: str
+    head: str
+    tail: str
+    sentiment: str
+
+
+class AspectSentence(BaseModel):
+    text: str
+    quads: List[AspectQuad]
+
+    @classmethod
+    def from_line(cls, line: str):
+        text, raw = line.split("####")
+        quads = []
+        for a, b, c, d in literal_eval(raw):
+            q = AspectQuad(head=a, category=b, sentiment=c, tail=d)
+            quads.append(q)
+        return cls(text=text, quads=quads)
+
+    def assert_valid(self):
+        for q in self.quads:
+            assert len(q.head) > 0
+            assert len(q.tail) > 0
+            assert len(q.sentiment) > 0
+            assert len(q.category) > 0
+
+
+class AspectData(BaseModel):
+    sents: List[AspectSentence]
+
+    @classmethod
+    def load_txt(cls, path: str):
+        with open(path) as f:
+            sents = [AspectSentence.from_line(line) for line in f]
+        return cls(sents=sents)
+
+    def analyze(self):
+        info = dict(
+            sents=len(self.sents),
+            category=len(set(q.category for s in self.sents for q in s.quads)),
+            counts=Counter(q.category for s in self.sents for q in s.quads),
+        )
+        print(json.dumps(info, indent=2))
+
+        for name in "head category sentiment tail".split():
+            print(f"\nHow many null {name}s?")
+            total = sum(len(s.quads) for s in self.sents)
+            num = sum(getattr(q, name) == "NULL" for s in self.sents for q in s.quads)
+            print(num / total)
+
+        for name in "head tail".split():
+            print(f"\nHow many valid {name}s?")
+            total = sum(len(s.quads) for s in self.sents)
+            num = sum(
+                getattr(q, name) in s.text + "NULL" for s in self.sents for q in s.quads
+            )
+            print(num / total)
+
+
+def test_aspect_data(path: str = "data/data_absa_quad/rest15/train.txt"):
+    data = AspectData.load_txt(path)
+    data.analyze()
+    for s in data.sents:
+        s.assert_valid()
+    breakpoint()
+
+
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
