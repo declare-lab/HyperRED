@@ -909,6 +909,81 @@ p q_main.py \
 --task triplet \
 --config_file q_config.yml
 
+################################################################################
+Pipeline Large
+
+p q_main.py \
+--seed 6 \
+--save_dir ckpt/q10_tags_large_seed_6 \
+--bert_model_name bert-large-uncased \
+--data_dir data/q10_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 6 \
+--save_dir ckpt/q10_triplet_large_seed_6 \
+--bert_model_name bert-large-uncased \
+--data_dir data/q10 \
+--task triplet \
+--config_file q_config.yml
+
+################################################################################
+Use average concat
+
+p q_main.py \
+--save_dir ckpt/q10_average_concat_seed_5 \
+--seed 5 \
+--use_average_concat \
+--data_dir data/q10 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+################################################################################
+Unfiltered data
+
+p q_main.py \
+--seed 3 \
+--save_dir ckpt/q0_seed_3 \
+--data_dir data/q0 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--seed 2 \
+--save_dir ckpt/q0_large_seed_2 \
+--bert_model_name bert-large-uncased \
+--data_dir data/q0 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--seed 2 \
+--save_dir ckpt/q0_tags_distilbert_seed_2 \
+--data_dir data/q0_tags \
+--task tagger \
+--config_file q_config.yml
+
+p q_main.py \
+--embedding_model pretrained \
+--pretrained_model_name distilbert-base-uncased \
+--seed 2 \
+--save_dir ckpt/q0_triplet_distilbert_seed_2 \
+--data_dir data/q0 \
+--task triplet \
+--config_file q_config.yml
+
 """
 
 

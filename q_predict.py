@@ -59,6 +59,7 @@ def eval_pipeline(
     temp_tags_in: str = "temp_tags_in.json",
 ):
     temp_triplets = str(Path(dir_triplets) / f"{data_split}.json")
+    temp_tags_in = str(Path(dir_tags) / temp_tags_in)
     process(
         source_file=temp_triplets,
         target_file=temp_tags_in,
@@ -249,6 +250,27 @@ p q_predict.py score_preds data/q10/gen_1.json data/q10/test.json
 p q_predict.py score_preds data/q10/gen_2.json data/q10/test.json
 p q_predict.py score_preds data/q10/gen_3.json data/q10/test.json
 p q_predict.py score_preds data/q10/gen_4.json data/q10/test.json
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q10_triplet_large_seed_4/ \
+--dir_tags ckpt/q10_tags_large_seed_4/ \
+--dir_data data/q10 \
+--path_label_tags data/q10_tags/label.json \
+--data_split test
+
+################################################################################
+
+p q_predict.py eval_pipeline \
+--dir_triplets ckpt/q0_triplet_distilbert_seed_2/ \
+--dir_tags ckpt/q0_tags_distilbert_seed_2/ \
+--dir_data data/q0 \
+--path_label_tags data/q0_tags/label.json \
+--data_split test
+
+p q_predict.py run_eval \
+ckpt/q0_seed_2/best_model \
+ckpt/q0_seed_2/dataset.pickle \
+test
 
 """
 

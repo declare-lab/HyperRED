@@ -771,6 +771,11 @@ p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_s
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_2.json data/q10/gen_2.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_3.json data/q10/gen_3.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_4.json data/q10/gen_4.json
+
+################################################################################
+
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0/
+p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_tags/ --mode tags
 """
 
 
