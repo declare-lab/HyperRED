@@ -791,6 +791,26 @@ class AspectData(BaseModel):
             sents = [AspectSentence.from_line(line) for line in f]
         return cls(sents=sents)
 
+    @classmethod
+    def load_aste_txt(cls, path: str):
+        sents = []
+        with open(path) as f:
+            for line in f:
+                quads = []
+                text, raw = line.split("#### #### ####")
+                tokens = text.split()
+                tuples = literal_eval(raw)
+                for head, tail, label in tuples:
+                    q = AspectQuad(
+                        head=" ".join([tokens[i] for i in head]),
+                        tail=" ".join([tokens[i] for i in tail]),
+                        sentiment=label,
+                        category=label,
+                    )
+                    quads.append(q)
+                sents.append(AspectSentence(text=text, quads=quads))
+        return cls(sents=sents)
+
     def analyze(self):
         info = dict(
             sents=len(self.sents),
@@ -840,17 +860,33 @@ class AspectData(BaseModel):
         print(dict(quads=sum(len(s.quads) for s in self.sents), lines=total))
 
 
-def test_aspect_data(path: str = "data/data_absa_quad/rest15/train.txt"):
-    data = AspectData.load_txt(path)
+def test_aspect_data(
+    path: str = "data/data_absa_quad/rest15/train.txt", is_aste: bool = False
+):
+    if is_aste:
+        data = AspectData.load_aste_txt(path)
+    else:
+        data = AspectData.load_txt(path)
     data.analyze()
     for s in data.sents:
         s.assert_valid()
+
+    random.seed(0)
+    for s in random.sample(data.sents, k=5):
+        print(s.text)
+        for q in s.quads:
+            print(q)
+        print()
     breakpoint()
 
 
-def convert_aspect_data(folder_in: str, folder_out: str):
+def convert_aspect_data(folder_in: str, folder_out: str, is_aste: bool = False):
     for path in sorted(Path(folder_in).glob("*.txt")):
-        data = AspectData.load_txt(str(path))
+        data = (
+            AspectData.load_aste_txt(str(path))
+            if is_aste
+            else AspectData.load_txt(str(path))
+        )
         path_out = Path(folder_out, Path(path.name).with_suffix(".json"))
         data.to_flat_quintuplets(str(path_out))
         print(path_out)
@@ -892,7 +928,11 @@ p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_
 
 p data/q_process.py convert_aspect_data data/data_absa_quad/rest15 data/flat_absa_quad/rest15
 p data/q_process.py process_many data/flat_absa_quad/rest15 data/rest15
+p data/q_process.py convert_aspect_data data/data_absa_quad/rest16 data/flat_absa_quad/rest16
+p data/q_process.py process_many data/flat_absa_quad/rest16 data/rest16
 
+p data/q_process.py convert_aspect_data data/data/triplet_data/14lap data/flat_aste/14lap --is_aste
+p data/q_process.py process_many data/flat_aste/14lap data/aste_14lap
 """
 
 

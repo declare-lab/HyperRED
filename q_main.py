@@ -998,6 +998,34 @@ p q_main.py \
 "recall": 0.35696517412935325,
 "f1": 0.35763239875389413  
 
+p q_main.py \
+--epochs 100 \
+--save_dir ckpt/rest15_epochs_100 \
+--data_dir data/rest15 \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.37637969094922735,
+"recall": 0.42412935323383083,
+"f1": 0.3988304093567251
+
+p q_main.py \
+--epochs 100 \
+--save_dir ckpt/aste_14lap_epochs_100 \
+--data_dir data/aste_14lap \
+--no_value_mlp \
+--prune_topk 20 \
+--use_pair2_mlp \
+--fix_q_loss \
+--config_file q_config.yml
+
+"precision": 0.52428810720268,  
+"recall": 0.5589285714285714,
+"f1": 0.5410544511668107 
+
 """
 
 
