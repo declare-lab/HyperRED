@@ -860,58 +860,11 @@ class AspectData(BaseModel):
         print(dict(quads=sum(len(s.quads) for s in self.sents), lines=total))
 
 
-def test_aspect_data(
-    path: str = "data/data_absa_quad/rest15/train.txt", is_aste: bool = False
-):
-    if is_aste:
-        data = AspectData.load_aste_txt(path)
-    else:
-        data = AspectData.load_txt(path)
-    data.analyze()
-    for s in data.sents:
-        s.assert_valid()
-
-    random.seed(0)
-    for s in random.sample(data.sents, k=5):
-        print(s.text)
-        for q in s.quads:
-            print(q)
-        print()
-    breakpoint()
-
-
-def convert_aspect_data(folder_in: str, folder_out: str, is_aste: bool = False):
-    for path in sorted(Path(folder_in).glob("*.txt")):
-        data = (
-            AspectData.load_aste_txt(str(path))
-            if is_aste
-            else AspectData.load_txt(str(path))
-        )
-        path_out = Path(folder_out, Path(path.name).with_suffix(".json"))
-        data.to_flat_quintuplets(str(path_out))
-        print(path_out)
-
-
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_30/ data/q30/
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10r/ --pretrained_model roberta-base
-p data/q_process.py make_labeled_train_split data/q10/ data/q10_labeled_train/ --num_train 3000
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_entity/ --mode entity
-
 p data/q_process.py clean_dev_test data/q10 data/q10_balance --num_dev 1000 --num_test 4000
-
-p data/q_process.py truncate_train data/q10/ data/q10_truncate_20 0.2
-p data/q_process.py truncate_train data/q10/ data/q10_truncate_40 0.4
-p data/q_process.py truncate_train data/q10/ data/q10_truncate_60 0.6
-p data/q_process.py truncate_train data/q10/ data/q10_truncate_80 0.8
-
-p data/q_process.py replace_train data/q10_truncate_20 data/q10_replace_20
-p data/q_process.py replace_train data/q10_truncate_40 data/q10_replace_40
-p data/q_process.py replace_train data/q10_truncate_60 data/q10_replace_60
-p data/q_process.py replace_train data/q10_truncate_80 data/q10_replace_80
-p data/q_process.py replace_train data/q10 data/q10_replace_100
 
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_1.json data/q10/gen_1.json
@@ -926,13 +879,6 @@ p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_
 
 ################################################################################
 
-p data/q_process.py convert_aspect_data data/data_absa_quad/rest15 data/flat_absa_quad/rest15
-p data/q_process.py process_many data/flat_absa_quad/rest15 data/rest15
-p data/q_process.py convert_aspect_data data/data_absa_quad/rest16 data/flat_absa_quad/rest16
-p data/q_process.py process_many data/flat_absa_quad/rest16 data/rest16
-
-p data/q_process.py convert_aspect_data data/data/triplet_data/14lap data/flat_aste/14lap --is_aste
-p data/q_process.py process_many data/flat_aste/14lap data/aste_14lap
 """
 
 
