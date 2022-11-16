@@ -17,15 +17,19 @@ from tqdm import tqdm
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import (RawPred, Sentence, SparseCube, load_raw_preds,
-                            load_sents, save_sents)
+from data.q_process import (
+    RawPred,
+    Sentence,
+    SparseCube,
+    load_raw_preds,
+    load_sents,
+    save_sents,
+)
 from inputs.datasets.q_dataset import Dataset
-from models.joint_decoding.q_decoder import (EntRelJointDecoder,
-                                             decode_nonzero_cuboids)
+from models.joint_decoding.q_decoder import EntRelJointDecoder, decode_nonzero_cuboids
 from models.joint_decoding.q_tagger import decode_nonzero_spans
 from modules.token_embedders.bert_encoder import BertLinear
-from q_main import (evaluate, load_model, prepare_inputs, process_outputs,
-                    score_preds)
+from q_main import evaluate, load_model, prepare_inputs, process_outputs, score_preds
 from scoring import QuintupletScorer
 
 
@@ -876,6 +880,53 @@ def test_decoding(
     # "precision": 0.9992310649750096,
     # "recall": 0.9714072136049337,
     # "f1": 0.9851227139202122
+
+
+def test_preds(path_pred: str, path_gold: str):
+    sents_pred = load_sents(path_pred)
+    sents_gold = load_sents(path_gold)
+    text_to_gold = {s.sentText: s for s in sents_gold}
+    limit = 10
+
+    count = 0
+    for s in sents_pred:
+        s2 = text_to_gold[s.sentText]
+        lst = [
+            q.as_texts(s.tokens, s.relationMentions)[:3] for q in s.qualifierMentions
+        ]
+        gold = [
+            q.as_texts(s2.tokens, s2.relationMentions)[:3] for q in s2.qualifierMentions
+        ]
+
+        if sorted(lst) != sorted(gold):
+            print(s.sentText)
+            print(dict(gold=gold))
+            print(dict(pred=lst))
+            print()
+            count += 1
+            if count > limit:
+                break
+
+    info = dict(
+        pred_labels=Counter(r.label for s in sents_pred for r in s.relationMentions),
+        gold_labels=Counter(r.label for s in sents_gold for r in s.relationMentions),
+        pred_tuples=sum(len(s.qualifierMentions) for s in sents_pred),
+        gold_tuples=sum(len(s.qualifierMentions) for s in sents_gold),
+    )
+    print(json.dumps(info, indent=2))
+    breakpoint()
+
+
+def score_preds_many(folder: str, path_gold: str):
+    results = []
+    for path in tqdm(sorted(Path(folder).glob("*/test.json"))):
+        r = score_preds(str(path), path_gold)
+        r["path"] = str(path)
+        results.append(r)
+
+    results = sorted(results, key=lambda r: r["quintuplet"]["f1"])
+    for r in results:
+        print(round(r["quintuplet"]["f1"], 3), r["path"])
 
 
 """
