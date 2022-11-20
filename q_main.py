@@ -16,7 +16,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from data.q_process import RawPred, SparseCube, load_sents
+from data_process import RawPred, SparseCube, load_sents
 from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
 from inputs.datasets.q_dataset import Dataset
 from inputs.fields.map_token_field import MapTokenField

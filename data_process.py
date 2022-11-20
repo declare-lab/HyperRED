@@ -618,20 +618,19 @@ def analyze_sents(sents: List[Sentence]):
 
 
 """
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
-p data/q_process.py clean_dev_test data/q10 data/q10_balance --num_dev 1000 --num_test 4000
+p data_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
+p data_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
 
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_1.json data/q10/gen_1.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_2.json data/q10/gen_2.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_3.json data/q10/gen_3.json
-p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_4.json data/q10/gen_4.json
+p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
+p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_1.json data/q10/gen_1.json
+p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_2.json data/q10/gen_2.json
+p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_3.json data/q10/gen_3.json
+p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_4.json data/q10/gen_4.json
 
 ################################################################################
 
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0/
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_tags/ --mode tags
+p data_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0/
+p data_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_tags/ --mode tags
 
 ################################################################################
 

@@ -5,7 +5,7 @@ from typing import List
 
 from fire import Fire
 
-from data.q_process import Qualifier, Sentence, process, save_sents
+from data_process import Qualifier, Sentence, process, save_sents
 from q_main import run_eval, score_preds
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
 

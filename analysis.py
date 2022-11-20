@@ -14,10 +14,11 @@ from fire import Fire
 from pydantic.main import BaseModel
 from torch.nn.functional import one_hot
 from tqdm import tqdm
+from transformers import BertTokenizer
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data.q_process import (
+from data_process import (
     RawPred,
     Sentence,
     SparseCube,
@@ -927,6 +928,24 @@ def score_preds_many(folder: str, path_gold: str):
     results = sorted(results, key=lambda r: r["quintuplet"]["f1"])
     for r in results:
         print(round(r["quintuplet"]["f1"], 3), r["path"])
+
+
+def delete_files(pattern: str, testing: bool = False):
+    for path in sorted(Path().glob(pattern)):
+        print(path)
+        assert Path(path).is_file()
+        if not testing:
+            os.remove(path)
+
+
+def test_tokenizers(name: str = "bert-base-uncased", path: str = "data/q10"):
+    tok1 = BertTokenizer.from_pretrained(name)
+    tok2 = AutoTokenizer.from_pretrained(name)
+    sents = load_sents(path)
+    for s in sents:
+        x1 = tok1(s.sentText)
+        x2 = tok2(s.sentText)
+        assert x1 == x2
 
 
 """

@@ -3,10 +3,9 @@ from typing import List, Tuple
 
 import torch
 import torch.nn as nn
-from data.q_process import BioEncoder
+from data_process import BioEncoder
 from models.embedding_models.bert_embedding_model import BertEmbedModel
-from models.embedding_models.pretrained_embedding_model import \
-    PretrainedEmbedModel
+from models.embedding_models.pretrained_embedding_model import PretrainedEmbedModel
 
 logger = logging.getLogger(__name__)
 

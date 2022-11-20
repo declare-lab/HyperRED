@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple
 
-from data.q_process import RawPred, Sentence
+from data_process import RawPred, Sentence
 
 
 def safe_divide(a: float, b: float) -> float:
