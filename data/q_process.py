@@ -3,9 +3,8 @@ import pickle
 import random
 import shutil
 from ast import literal_eval
-from collections import Counter
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import fire
 import numpy as np
@@ -421,8 +420,6 @@ def process(
                 sent = add_tokens(sent, auto_tokenizer)
                 if mode == "joint":
                     sent = add_joint_label(sent, label_vocab)
-                elif mode == "entity":
-                    sent = add_tag_joint_label(sent, label_vocab)
                 else:
                     raise ValueError
                 print(json.dumps(sent), file=fout)
@@ -474,35 +471,6 @@ def make_tag_label_file(pattern_in: str, path_out: str):
         q_num_logits=len(tags) + 1,
     )
     print(dict(labels=len(labels), tags=len(tags), qualifiers=len(qualifiers)))
-    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
-    with open(path_out, "w") as f:
-        f.write(json.dumps(info, indent=2))
-
-
-def make_entity_label_file(pattern_in: str, path_out: str):
-    tags = []
-    others = []
-    for path in sorted(Path().glob(pattern_in)):
-        with open(path) as f:
-            for line in tqdm(f):
-                s = Sentence(**json.loads(line))
-                for e in s.entityMentions:
-                    tags.append("B-" + e.label)
-                    tags.append("I-" + e.label)
-                    others.append(e.label)
-                for r in s.relationMentions:
-                    others.append(r.label)
-                for q in s.qualifierMentions:
-                    others.append(q.label)
-
-    tags = sorted(set(tags))
-    others = sorted(set(others))
-    labels = ["O"] + tags + others
-    info = dict(
-        id={name: i for i, name in enumerate(labels)},
-        q_num_logits=len(tags) + 1,
-    )
-    print(dict(labels=len(labels), tags=len(tags), others=len(others)))
     Path(path_out).parent.mkdir(exist_ok=True, parents=True)
     with open(path_out, "w") as f:
         f.write(json.dumps(info, indent=2))
@@ -563,8 +531,6 @@ def process_many(
     path_label = str(Path(dir_out) / "label.json")
     if mode == "tags":
         make_tag_label_file("temp/*.json", path_label)
-    elif mode == "entity":
-        make_entity_label_file("temp/*.json", path_label)
     else:
         make_label_file("temp/*.json", path_label)
     for path in sorted(Path(dir_temp).glob("*.json")):
@@ -642,52 +608,6 @@ def test_bio():
     assert spans == preds
 
 
-def truncate_train(folder_in: str, folder_out: str, fraction: float):
-    """Keep only a fraction of original train size"""
-    if Path(folder_out).exists():
-        shutil.rmtree(folder_out)
-    shutil.copytree(folder_in, folder_out)
-    path = str(Path(folder_out) / "train.json")
-    sents = load_sents(path)
-    assert 0.0 < fraction < 1.0
-    sents = sents[: round(len(sents) * fraction)]
-    print(dict(path=path, sents=len(sents)))
-    save_sents(sents, path)
-
-
-def replace_train(folder_in: str, folder_out: str):
-    """Replace some train samples with test samples"""
-    if Path(folder_out).exists():
-        shutil.rmtree(folder_out)
-    shutil.copytree(folder_in, folder_out)
-    path = str(Path(folder_out) / "train.json")
-    sents = load_sents(path)
-    gold = load_sents(str(Path(folder_out) / "test.json"))
-    assert len(sents) > len(gold)
-    sents = sents[len(gold) :] + gold
-    print(dict(path=path, sents=len(sents)))
-    save_sents(sents, path)
-
-
-def transfer_sents(
-    a: List[Sentence],
-    b: List[Sentence],
-    limit: int,
-    count_fn: Callable[[Sentence], int],
-):
-    """Transfer num sents from a to b based on conditional check_fn"""
-    exclude = set()
-    count = 0
-    for s in a:
-        num = count_fn(s)
-        if num > 0 and count < limit:
-            b.append(s)
-            exclude.add(s.sentText)
-            count += num
-    a = [s for s in a if s.sentText not in exclude]
-    return a, b
-
-
 def analyze_sents(sents: List[Sentence]):
     info = dict(
         sents=len(sents),
@@ -697,173 +617,9 @@ def analyze_sents(sents: List[Sentence]):
     print(json.dumps(info, indent=2))
 
 
-def clean_dev_test(folder_in: str, folder_out: str, num_dev: int, num_test: int):
-    """Ensure number of samples and relations and qualifiers are balanced"""
-    if Path(folder_out).exists():
-        shutil.rmtree(folder_out)
-    shutil.copytree(folder_in, folder_out)
-    path_dev = str(Path(folder_out) / "dev.json")
-    path_test = str(Path(folder_out) / "test.json")
-    sents_dev = load_sents(path_dev)
-    sents_test = load_sents(path_test)
-    analyze_sents(sents_dev)
-    analyze_sents(sents_test)
-
-    qualifiers_dev = [q.label for s in sents_dev for q in s.qualifierMentions]
-    relations_dev = [q.label for s in sents_dev for q in s.relationMentions]
-    qualifiers_test = [q.label for s in sents_test for q in s.qualifierMentions]
-    relations_test = [q.label for s in sents_test for q in s.relationMentions]
-
-    for label in set(qualifiers_test).difference(qualifiers_dev):
-        count = Counter(qualifiers_test)[label]
-        num = round(count * num_dev / num_test)
-        sents_test, sents_dev = transfer_sents(
-            sents_test,
-            sents_dev,
-            num,
-            count_fn=lambda s: Counter(q.label for q in s.qualifierMentions)[label],
-        )
-
-    for label in set(relations_test).difference(relations_dev):
-        count = Counter(relations_test)[label]
-        num = round(count * num_dev / num_test)
-        sents_test, sents_dev = transfer_sents(
-            sents_test,
-            sents_dev,
-            num,
-            count_fn=lambda s: Counter(r.label for r in s.relationMentions)[label],
-        )
-
-    gap = num_test - len(sents_test)
-    print(dict(gap=gap))
-    assert gap > 0
-    sents_test.extend(sents_dev[:gap])
-    sents_dev = sents_dev[gap:]
-    analyze_sents(sents_dev)
-    analyze_sents(sents_test)
-    save_sents(sents_dev, path_dev)
-    save_sents(sents_test, path_test)
-
-
-class AspectQuad(BaseModel):
-    category: str
-    head: str
-    tail: str
-    sentiment: str
-
-
-class AspectSentence(BaseModel):
-    text: str
-    quads: List[AspectQuad]
-
-    @classmethod
-    def from_line(cls, line: str):
-        text, raw = line.split("####")
-        quads = []
-        for a, b, c, d in literal_eval(raw):
-            q = AspectQuad(head=a, category=b, sentiment=c, tail=d)
-            quads.append(q)
-        return cls(text=text, quads=quads)
-
-    def assert_valid(self):
-        for q in self.quads:
-            assert len(q.head) > 0
-            assert len(q.tail) > 0
-            assert len(q.sentiment) > 0
-            assert len(q.category) > 0
-
-
-def find_sublist_indices(items: list, query: list) -> List[int]:
-    indices = []
-    length = len(query)
-    for i in range(len(items) - length + 1):
-        if items[i : i + length] == query:
-            indices.append(i)
-    return indices
-
-
-class AspectData(BaseModel):
-    sents: List[AspectSentence]
-
-    @classmethod
-    def load_txt(cls, path: str):
-        with open(path) as f:
-            sents = [AspectSentence.from_line(line) for line in f]
-        return cls(sents=sents)
-
-    @classmethod
-    def load_aste_txt(cls, path: str):
-        sents = []
-        with open(path) as f:
-            for line in f:
-                quads = []
-                text, raw = line.split("#### #### ####")
-                tokens = text.split()
-                tuples = literal_eval(raw)
-                for head, tail, label in tuples:
-                    q = AspectQuad(
-                        head=" ".join([tokens[i] for i in head]),
-                        tail=" ".join([tokens[i] for i in tail]),
-                        sentiment=label,
-                        category=label,
-                    )
-                    quads.append(q)
-                sents.append(AspectSentence(text=text, quads=quads))
-        return cls(sents=sents)
-
-    def analyze(self):
-        info = dict(
-            sents=len(self.sents),
-            category=len(set(q.category for s in self.sents for q in s.quads)),
-            counts=Counter(q.category for s in self.sents for q in s.quads),
-            quintuplets=sum(len(s.quads) for s in self.sents),
-            sents_no_quads=sum(len(s.quads) == 0 for s in self.sents),
-        )
-        print(json.dumps(info, indent=2))
-
-        for name in "head category sentiment tail".split():
-            print(f"\nHow many null {name}s?")
-            total = sum(len(s.quads) for s in self.sents)
-            num = sum(getattr(q, name) == "NULL" for s in self.sents for q in s.quads)
-            print(num / total)
-
-        for name in "head tail".split():
-            print(f"\nHow many valid {name}s?")
-            total = sum(len(s.quads) for s in self.sents)
-            num = sum(
-                getattr(q, name) in s.text + "NULL" for s in self.sents for q in s.quads
-            )
-            print(num / total)
-
-    def to_flat_quintuplets(self, path: str):
-        Path(path).parent.mkdir(exist_ok=True, parents=True)
-        total = 0
-        with open(path, "w") as f:
-            for s in self.sents:
-                for q in s.quads:
-                    tokens = " ".join(["NULL", s.text]).split()
-                    head = q.head.split()
-                    tail = q.tail.split()
-                    for i in find_sublist_indices(tokens, head):
-                        for j in find_sublist_indices(tokens, tail):
-                            flat = FlatQuintuplet(
-                                tokens=tokens,
-                                head=(i, i + len(head)),
-                                tail=(j, j + len(tail)),
-                                value=(0, 1),
-                                relation=q.sentiment,
-                                qualifier=q.category,
-                            )
-                            f.write(flat.json() + "\n")
-                            total += 1
-
-        print(dict(quads=sum(len(s.quads) for s in self.sents), lines=total))
-
-
 """
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
 p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
-p data/q_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_entity/ --mode entity
 p data/q_process.py clean_dev_test data/q10 data/q10_balance --num_dev 1000 --num_test 4000
 
 p data/q_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
