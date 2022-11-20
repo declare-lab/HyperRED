@@ -24,9 +24,7 @@ from inputs.fields.raw_token_field import RawTokenField
 from inputs.fields.token_field import TokenField
 from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
-from models.joint_decoding.joint_decoder import EntRelJointDecoder as TripletModel
-from models.joint_decoding.q_decoder import EntRelJointDecoder
-from models.joint_decoding.q_tagger import EntRelJointDecoder as Tagger
+from modeling import EntRelJointDecoder as TripletModel, CubeRE, Tagger
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
 from utils.new_argparse import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
@@ -35,9 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_model(task: str, path: str = "", **kwargs):
-    model_class = dict(
-        quintuplet=EntRelJointDecoder, tagger=Tagger, triplet=TripletModel
-    )[task]
+    model_class = dict(quintuplet=CubeRE, tagger=Tagger, triplet=TripletModel)[task]
     if path:
         return model_class.load(path)
     else:
@@ -421,9 +417,7 @@ def main():
         model.cuda(device=cfg.device)
 
     if cfg.load_weight_path:
-        model.load_state_dict(
-            EntRelJointDecoder.load(cfg.load_weight_path).state_dict()
-        )
+        model.load_state_dict(CubeRE.load(cfg.load_weight_path).state_dict())
 
     path_data = str(Path(cfg.save_dir) / "dataset.pickle")
     ace_dataset.save(path_data)
