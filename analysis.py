@@ -27,9 +27,7 @@ from data_process import (
     save_sents,
 )
 from inputs.datasets.q_dataset import Dataset
-from models.joint_decoding.q_decoder import EntRelJointDecoder, decode_nonzero_cuboids
-from models.joint_decoding.q_tagger import decode_nonzero_spans
-from modules.token_embedders.bert_encoder import BertLinear
+from modeling import CubeRE, decode_nonzero_cuboids, decode_nonzero_spans, BertLinear
 from q_main import evaluate, load_model, prepare_inputs, process_outputs, score_preds
 from scoring import QuintupletScorer
 
@@ -411,7 +409,7 @@ def test_prune_eval(
     task: str = "quintuplet",
     path_in: str = "",
 ):
-    model = EntRelJointDecoder.load(path)
+    model = CubeRE.load(path)
     model.prune_topk = 20
     # model.prune_topk = 80
 
@@ -859,7 +857,7 @@ def test_decoding(
         q_scores = one_hot(inputs["quintuplet_matrix"], num_q).float()
         r_scores = one_hot(inputs["joint_label_matrix"], num_r).float()
         batch_seq_tokens_lens = inputs["tokens_lens"]
-        assert isinstance(model, EntRelJointDecoder)
+        assert isinstance(model, CubeRE)
 
         outputs = model.soft_joint_decoding(
             batch_normalized_joint_score=r_scores,
