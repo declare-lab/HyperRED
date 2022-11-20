@@ -2,11 +2,9 @@ import logging
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel
-from transformers import BertModel
+from transformers import AutoModel, BertModel
 
-from utils.nn_utils import batched_index_select
-from utils.nn_utils import gelu
+from nn_utils import batched_index_select, gelu
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from data_process import BioEncoder
 from embedders import BertEmbedModel, PretrainedEmbedModel, BertLinear
-from utils.nn_utils import batched_index_select
+from nn_utils import batched_index_select
 
 logger = logging.getLogger(__name__)
 
