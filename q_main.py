@@ -26,7 +26,7 @@ from inputs.instance import Instance
 from inputs.vocabulary import Vocabulary
 from modeling import EntRelJointDecoder as TripletModel, CubeRE, Tagger
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
-from utils.new_argparse import ConfigurationParer
+from configuration import ConfigurationParer
 from utils.nn_utils import get_n_trainable_parameters
 
 logger = logging.getLogger(__name__)

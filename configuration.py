@@ -3,8 +3,82 @@ import os
 
 import configargparse
 
-from utils.logging_utils import init_logger
-from utils.parse_action import StoreLoggingLevelAction
+
+def init_logger(
+    root_log_level=logging.DEBUG,
+    console_log_level=logging.NOTSET,
+    log_file=None,
+    log_file_level=logging.NOTSET,
+):
+    """This funtion initializes a customized logger
+
+    Keyword Arguments:
+        root_log_level {int} -- root logging level (default: {logging.DEBUG})
+        console_log_level {int} -- console logging level (default: {logging.NOTSET})
+        log_file {str} -- logging file path (default: {None})
+        log_file_level {int} -- logging file level (default: {logging.NOTSET})
+    """
+
+    log_format = logging.Formatter(
+        "[%(asctime)s - %(filename)s - line:%(lineno)d - %(levelname)s]: %(message)s"
+    )
+    handlers = []
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(console_log_level)
+    console_handler.setFormatter(log_format)
+    handlers.append(console_handler)
+
+    if log_file is not None and log_file != "":
+        if os.path.exists(log_file):
+            os.remove(log_file)
+        elif not os.path.exists(os.path.dirname(log_file)):
+            os.makedirs(os.path.dirname(log_file))
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(log_file_level)
+        file_handler.setFormatter(log_format)
+        handlers.append(file_handler)
+
+    logging.basicConfig(level=root_log_level, handlers=handlers)
+
+
+class StoreLoggingLevelAction(configargparse.Action):
+    """This class converts string into logging level"""
+
+    LEVELS = {
+        "CRITICAL": logging.CRITICAL,
+        "ERROR": logging.ERROR,
+        "WARNING": logging.WARNING,
+        "INFO": logging.INFO,
+        "DEBUG": logging.DEBUG,
+        "NOTSET": logging.NOTSET,
+    }
+
+    CHOICES = list(LEVELS.keys()) + [str(_) for _ in LEVELS.values()]
+
+    def __init__(self, option_strings, dest, help=None, **kwargs):
+        super().__init__(option_strings, dest, help=help, **kwargs)
+
+    def __call__(self, parser, namespace, value, option_string=None):
+        """This function gets the key 'value' in the LEVELS, or just uses value"""
+
+        level = StoreLoggingLevelAction.LEVELS.get(value, value)
+        setattr(namespace, self.dest, level)
+
+
+class CheckPathAction(configargparse.Action):
+    """This class checks file path, if not exits, then create dir(file)"""
+
+    def __init__(self, option_strings, dest, help=None, **kwargs):
+        super().__init__(option_strings, dest, help=help, **kwargs)
+
+    def __call__(self, parser, namespace, value, option_string=None):
+        """This function checks file path, if not exits, then create dir(file)"""
+
+        parent_path = os.path.dirname(value)
+        if not os.path.exists(parent_path):
+            os.makedirs(parent_path)
+        setattr(namespace, self.dest, value)
 
 
 class ConfigurationParer:
