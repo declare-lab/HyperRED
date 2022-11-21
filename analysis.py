@@ -26,7 +26,7 @@ from data_process import (
     load_sents,
     save_sents,
 )
-from inputs.datasets.q_dataset import Dataset
+from data_reader import Dataset
 from modeling import CubeRE, decode_nonzero_cuboids, decode_nonzero_spans, BertLinear
 from q_main import evaluate, load_model, prepare_inputs, process_outputs, score_preds
 from scoring import QuintupletScorer
