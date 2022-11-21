@@ -6,7 +6,7 @@ from typing import List
 from fire import Fire
 
 from data_process import Qualifier, Sentence, process, save_sents
-from q_main import run_eval, score_preds
+from training import run_eval, score_preds
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
 
 assert run_eval is not None
@@ -89,18 +89,8 @@ def eval_pipeline(
 
 
 """
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert/ \
---dir_tags ckpt/q10_tags_distilbert/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
 
-"precision": 0.6955640621481648,
-"recall": 0.5772752756494113,
-"f1": 0.6309232026143791
-
-p q_predict.py eval_pipeline \
+p prediction.py eval_pipeline \
 --dir_triplets ckpt/q10_triplet_distilbert_seed_0/ \
 --dir_tags ckpt/q10_tags_distilbert_seed_0/ \
 --dir_data data/q10 \
@@ -111,89 +101,35 @@ p q_predict.py eval_pipeline \
 "recall": 0.5740982993832928,
 "f1": 0.6241365298659082
 
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_1/ \
---dir_tags ckpt/q10_tags_distilbert_seed_1/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.6921871502126707,                                                                                                                            
-"recall": 0.5778359185199028,
-"f1": 0.6298635159910368
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_2/ \
---dir_tags ckpt/q10_tags_distilbert_seed_2/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.69197836863452,
-"recall": 0.5739114184264623,
-"f1": 0.6274389621003167
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_3/ \
---dir_tags ckpt/q10_tags_distilbert_seed_3/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.7093997208003723,
-"recall": 0.5698000373761913,
-"f1": 0.6319825888693129
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_4/ \
---dir_tags ckpt/q10_tags_distilbert_seed_4/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.7029948209862643,
-"recall": 0.5834423472248178,
-"f1": 0.6376633986928104
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_distilbert_seed_5/ \
---dir_tags ckpt/q10_tags_distilbert_seed_5/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-"precision": 0.6863971409425955,
-"recall": 0.5742851803401233,
-"f1": 0.6253561253561254
-
 ################################################################################
 Triplet Scores
 
-p q_predict.py score_preds ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
+p prediction.py score_preds ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
 "precision": 0.7252410166520596,
 "recall": 0.6974294142435735,  
 "f1": 0.7110633727175081
 
-p q_predict.py score_preds ckpt/q10_tags_distilbert_seed_0/pred.json data/q10/test.json
+p prediction.py score_preds ckpt/q10_tags_distilbert_seed_0/pred.json data/q10/test.json
 "precision": 0.7587951807228915,
 "recall": 0.6635061104087653,
 "f1": 0.7079586330935252
 
-p q_predict.py score_preds data/q10/gen_pred.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_pred.json data/q10/test.json
 "precision": 0.6971830985915493,             
-"recall": 0.6466498103666245,                                                                                    "f1": 0.6709663314385658
+"recall": 0.6466498103666245,
+"f1": 0.6709663314385658
 
 ################################################################################
 Model speed comparison
 
-p q_predict.py run_eval \
+p prediction.py run_eval \
 ckpt/q10_pair2_no_value_prune_20_seed_0/best_model \
 ckpt/q10_pair2_no_value_prune_20_seed_0/dataset.pickle \
 test
 
 Cube: 25s for 4k samples, 6.6GB
 
-p q_predict.py run_eval \
+p prediction.py run_eval \
 ckpt/q10_triplet_distilbert_seed_0/best_model \
 ckpt/q10_triplet_distilbert_seed_0/dataset.pickle \
 --task triplet \
@@ -201,7 +137,7 @@ test
 
 Triplet: 18s for 4k samples, 3.7GB
 
-p q_predict.py run_eval \
+p prediction.py run_eval \
 ckpt/q10_tags_distilbert_seed_0/best_model \
 ckpt/q10_tags_distilbert_seed_0/dataset.pickle \
 --task tagger \
@@ -213,64 +149,29 @@ Generative: 107s for 4k samples, 3.9GB
 ################################################################################
 Eval pipeline base
 
-p q_predict.py eval_pipeline \
+p prediction.py eval_pipeline \
 --dir_triplets ckpt/q10_triplet_seed_0/ \
 --dir_tags ckpt/q10_tags_seed_0/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
 
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_seed_1/ \
---dir_tags ckpt/q10_tags_seed_1/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_seed_2/ \
---dir_tags ckpt/q10_tags_seed_2/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q10_triplet_seed_3/ \
---dir_tags ckpt/q10_tags_seed_3/ \
---dir_data data/q10 \
---path_label_tags data/q10_tags/label.json \
---data_split test
-
-p q_predict.py score_preds \
+p prediction.py score_preds \
 ckpt/q10_pair2_no_value_prune_20_seed_0/test.json \
 data/q10/test.json
 
-p q_predict.py score_preds data/q10/gen_pred.json data/q10/test.json
-p q_predict.py score_preds data/q10/gen_1.json data/q10/test.json
-p q_predict.py score_preds data/q10/gen_2.json data/q10/test.json
-p q_predict.py score_preds data/q10/gen_3.json data/q10/test.json
-p q_predict.py score_preds data/q10/gen_4.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_pred.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_1.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_2.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_3.json data/q10/test.json
+p prediction.py score_preds data/q10/gen_4.json data/q10/test.json
 
-p q_predict.py eval_pipeline \
+p prediction.py eval_pipeline \
 --dir_triplets ckpt/q10_triplet_large_seed_4/ \
 --dir_tags ckpt/q10_tags_large_seed_4/ \
 --dir_data data/q10 \
 --path_label_tags data/q10_tags/label.json \
 --data_split test
-
-################################################################################
-
-p q_predict.py eval_pipeline \
---dir_triplets ckpt/q0_triplet_distilbert_seed_2/ \
---dir_tags ckpt/q0_tags_distilbert_seed_2/ \
---dir_data data/q0 \
---path_label_tags data/q0_tags/label.json \
---data_split test
-
-p q_predict.py run_eval \
-ckpt/q0_seed_2/best_model \
-ckpt/q0_seed_2/dataset.pickle \
-test
 
 """
 

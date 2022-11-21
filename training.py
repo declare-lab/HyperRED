@@ -434,7 +434,7 @@ def main():
 ################################################################################
 BERT-Large
 
-p q_main.py \
+p training.py \
 --bert_model_name bert-large-uncased \
 --save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_0 \
 --seed 0 \
@@ -443,13 +443,13 @@ p q_main.py \
 --prune_topk 20 \
 --use_pair2_mlp \
 --fix_q_loss \
---config_file q_config.yml
+--config_file config.yml
 
 ################################################################################
 
 BERT-Base
 
-p q_main.py \
+p training.py \
 --save_dir ckpt/q10_pair2_no_value_prune_20_seed_0 \
 --seed 0 \
 --data_dir data/q10 \
@@ -457,73 +457,31 @@ p q_main.py \
 --prune_topk 20 \
 --use_pair2_mlp \
 --fix_q_loss \
---config_file q_config.yml
+--config_file config.yml
 
 ################################################################################
 Triplet task (10)
 
-p q_main.py \
+p training.py \
 --seed 0 \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
 --save_dir ckpt/q10_triplet_distilbert_seed_0 \
 --data_dir data/q10 \
 --task triplet \
---config_file q_config.yml
+--config_file config.yml
 
 ################################################################################
 Tagger task (10)
 
-p q_main.py \
+p training.py \
 --seed 0 \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
 --save_dir ckpt/q10_tags_distilbert_seed_0 \
 --data_dir data/q10_tags \
 --task tagger \
---config_file q_config.yml
-
-################################################################################
-Unfiltered data
-
-p q_main.py \
---seed 3 \
---save_dir ckpt/q0_seed_3 \
---data_dir data/q0 \
---no_value_mlp \
---prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-p q_main.py \
---seed 2 \
---save_dir ckpt/q0_large_seed_2 \
---bert_model_name bert-large-uncased \
---data_dir data/q0 \
---no_value_mlp \
---prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
---config_file q_config.yml
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name distilbert-base-uncased \
---seed 2 \
---save_dir ckpt/q0_tags_distilbert_seed_2 \
---data_dir data/q0_tags \
---task tagger \
---config_file q_config.yml
-
-p q_main.py \
---embedding_model pretrained \
---pretrained_model_name distilbert-base-uncased \
---seed 2 \
---save_dir ckpt/q0_triplet_distilbert_seed_2 \
---data_dir data/q0 \
---task triplet \
---config_file q_config.yml
+--config_file config.yml
 
 """
 
