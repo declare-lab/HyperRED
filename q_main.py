@@ -16,18 +16,20 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-from data_process import RawPred, SparseCube, load_sents
-from inputs.dataset_readers.q_reader import ACEReaderForJointDecoding
-from inputs.datasets.q_dataset import Dataset
-from inputs.fields.map_token_field import MapTokenField
-from inputs.fields.raw_token_field import RawTokenField
-from inputs.fields.token_field import TokenField
-from inputs.instance import Instance
-from inputs.vocabulary import Vocabulary
-from modeling import EntRelJointDecoder as TripletModel, CubeRE, Tagger
-from scoring import EntityScorer, QuintupletScorer, StrictScorer
 from configuration import ConfigurationParer
+from data_process import RawPred, SparseCube, load_sents
+from data_reader import (
+    DataReader,
+    Dataset,
+    MapTokenField,
+    RawTokenField,
+    TokenField,
+    Instance,
+)
+from modeling import EntRelJointDecoder as TripletModel, CubeRE, Tagger
 from nn_utils import get_n_trainable_parameters
+from scoring import EntityScorer, QuintupletScorer, StrictScorer
+from vocabulary import Vocabulary
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +261,7 @@ def evaluate(
             "tokens": cfg.max_sent_len,
             "wordpiece_tokens": cfg.max_wordpiece_len,
         }
-        reader = ACEReaderForJointDecoding(path_in, False, max_len)
+        reader = DataReader(path_in, False, max_len)
         fields = dataset.instance_dict["test"]["instance"].fields
         instance = Instance(fields)
         dataset.add_instance(
@@ -372,9 +374,9 @@ def main():
     else:
         raise ValueError()
 
-    ace_train_reader = ACEReaderForJointDecoding(cfg.train_file, False, max_len)
-    ace_dev_reader = ACEReaderForJointDecoding(cfg.dev_file, False, max_len)
-    ace_test_reader = ACEReaderForJointDecoding(cfg.test_file, False, max_len)
+    ace_train_reader = DataReader(cfg.train_file, False, max_len)
+    ace_dev_reader = DataReader(cfg.dev_file, False, max_len)
+    ace_test_reader = DataReader(cfg.test_file, False, max_len)
 
     # define dataset
     ace_dataset = Dataset("ACE2005")
