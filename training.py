@@ -10,22 +10,15 @@ from typing import Dict, List
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.functional import Tensor
+from torch import Tensor
 from tqdm import tqdm
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from configuration import ConfigurationParer
-from data_process import RawPred, SparseCube, load_sents
-from data_reader import (
-    DataReader,
-    Dataset,
-    MapTokenField,
-    RawTokenField,
-    TokenField,
-    Instance,
-)
+from data_process import RawPred, SparseCube, Data
+from data_reader import DataReader, Dataset, RawTokenField, TokenField, Instance
 from modeling import EntRelJointDecoder as TripletModel, CubeRE, Tagger
 from nn_utils import get_n_trainable_parameters
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
@@ -56,8 +49,8 @@ def run_eval(
 
 
 def score_preds(path_pred: str, path_gold: str) -> dict:
-    preds = load_sents(path_pred)
-    sents = load_sents(path_gold)
+    preds = Data.load(path_pred).sents
+    sents = Data.load(path_gold).sents
     results = {}
     for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
         results[scorer.name] = scorer.run(preds, sents)
@@ -125,6 +118,7 @@ def train(cfg, dataset, model):
 
         optimizer_grouped_parameters.append(params)
 
+    # noinspection PyTypeChecker
     optimizer = AdamW(
         optimizer_grouped_parameters,
         betas=(cfg.adam_beta1, cfg.adam_beta2),
@@ -230,10 +224,7 @@ def process_outputs(
             if k in ["tokens", "joint_label_matrix", "joint_label_preds"]:
                 output[k] = v[i].cpu().numpy()
             if k in [
-                "span2ent",
-                "span2rel",
                 "seq_len",
-                "separate_positions",
                 "all_separate_position_preds",
                 "all_ent_preds",
                 "all_rel_preds",
@@ -291,6 +282,7 @@ def evaluate(
     print(dict(path=path))
     with open(path, "w") as f:
         for r in all_outputs:
+            # noinspection Pydantic
             sent = RawPred(**r).as_sentence(model.vocab)
             f.write(sent.json() + "\n")
 
@@ -329,9 +321,6 @@ def main():
 
     # define fields
     tokens = TokenField("tokens", "tokens", "tokens", True)
-    separate_positions = RawTokenField("separate_positions", "separate_positions")
-    span2ent = MapTokenField("span2ent", "ent_rel_id", "span2ent", False)
-    span2rel = MapTokenField("span2rel", "ent_rel_id", "span2rel", False)
     joint_label_matrix = RawTokenField("joint_label_matrix", "joint_label_matrix")
     quintuplet_shape = RawTokenField("quintuplet_shape", "quintuplet_shape")
     quintuplet_entries = RawTokenField("quintuplet_entries", "quintuplet_entries")
@@ -344,7 +333,7 @@ def main():
     wordpiece_segment_ids = RawTokenField(
         "wordpiece_segment_ids", "wordpiece_segment_ids"
     )
-    fields = [tokens, separate_positions, span2ent, span2rel, joint_label_matrix]
+    fields = [tokens, joint_label_matrix]
     fields.extend([quintuplet_shape, quintuplet_entries])
 
     if cfg.embedding_model in ["bert", "pretrained"]:
@@ -405,7 +394,7 @@ def main():
         contain_pad_namespace=contain_pad_namespace,
         contain_unk_namespace=contain_unk_namespace,
     )
-    wo_padding_namespace = ["separate_positions", "span2ent", "span2rel"]
+    wo_padding_namespace = []
     ace_dataset.set_wo_padding_namespace(wo_padding_namespace=wo_padding_namespace)
 
     if cfg.test:
@@ -436,9 +425,9 @@ BERT-Large
 
 p training.py \
 --bert_model_name bert-large-uncased \
---save_dir ckpt/q10_pair2_no_value_prune_20_large_seed_0 \
+--save_dir ckpt/pair2_no_value_prune_20_large_seed_0 \
 --seed 0 \
---data_dir data/q10 \
+--data_dir data/processed \
 --no_value_mlp \
 --prune_topk 20 \
 --use_pair2_mlp \
@@ -450,9 +439,9 @@ p training.py \
 BERT-Base
 
 p training.py \
---save_dir ckpt/q10_pair2_no_value_prune_20_seed_0 \
+--save_dir ckpt/pair2_no_value_prune_20_seed_0 \
 --seed 0 \
---data_dir data/q10 \
+--data_dir data/processed \
 --no_value_mlp \
 --prune_topk 20 \
 --use_pair2_mlp \
@@ -466,8 +455,8 @@ p training.py \
 --seed 0 \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
---save_dir ckpt/q10_triplet_distilbert_seed_0 \
---data_dir data/q10 \
+--save_dir ckpt/triplet_distilbert_seed_0 \
+--data_dir data/processed \
 --task triplet \
 --config_file config.yml
 
@@ -478,8 +467,8 @@ p training.py \
 --seed 0 \
 --embedding_model pretrained \
 --pretrained_model_name distilbert-base-uncased \
---save_dir ckpt/q10_tags_distilbert_seed_0 \
---data_dir data/q10_tags \
+--save_dir ckpt/tags_distilbert_seed_0 \
+--data_dir data/processed_tags \
 --task tagger \
 --config_file config.yml
 

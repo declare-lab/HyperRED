@@ -1,10 +1,8 @@
 import json
 import pickle
-import random
 import shutil
-from ast import literal_eval
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import fire
 import numpy as np
@@ -35,8 +33,6 @@ def load_quintuplets(path: str) -> List[FlatQuintuplet]:
 
 
 class Entity(BaseModel):
-    emId: str
-    text: str
     offset: Span  # Token spans, start inclusive, end exclusive
     label: str
 
@@ -45,41 +41,31 @@ class Entity(BaseModel):
 
 
 class Relation(BaseModel):
-    em1Id: str
-    em1Text: str
-    em2Id: str
-    em2Text: str
+    head: Span
+    tail: Span
     label: str
+    qualifiers: List[Entity]
 
+    def merge(self, other):
+        assert isinstance(other, Relation)
+        assert (self.head, self.tail, self.label) == (
+            other.head,
+            other.tail,
+            other.label,
+        )
+        qualifiers: Dict[str, Entity] = {q.json(): q for q in self.qualifiers}
+        for q in other.qualifiers:
+            qualifiers[q.json()] = q
+        self.qualifiers = list(qualifiers.values())
 
-class Qualifier(BaseModel):
-    em1Id: str
-    em2Id: str
-    em3Id: str
-    label: str
-
-    def parse_span(self, i: str) -> Tuple[int, int]:
-        x = literal_eval(i)
-        if not isinstance(x[0], int):
-            return x[0]
-        return x
-
-    def parse_relation(self, triplets: List[Relation]) -> str:
-        label = ""
-        for r in triplets:
-            if self.parse_span(r.em1Id) == self.parse_span(self.em1Id):
-                if self.parse_span(r.em2Id) == self.parse_span(self.em2Id):
-                    label = r.label
-        return label
-
-    def as_texts(
-        self, tokens: List[str], triplets: List[Relation]
-    ) -> Tuple[str, str, str, str, str]:
-        head = " ".join(tokens[slice(*self.parse_span(self.em1Id))])
-        tail = " ".join(tokens[slice(*self.parse_span(self.em2Id))])
-        value = " ".join(tokens[slice(*self.parse_span(self.em3Id))])
-        relation = self.parse_relation(triplets)
-        return (head, relation, tail, self.label, value)
+    def as_tuples(self, tokens: List[str]) -> List[Tuple[str, str, str, str, str]]:
+        tuples = []
+        head = " ".join(tokens[slice(*self.head)])
+        tail = " ".join(tokens[slice(*self.tail)])
+        for q in self.qualifiers:
+            value = " ".join(tokens[slice(*q.offset)])
+            tuples.append((head, self.label, tail, q.label, value))
+        return tuples
 
 
 class SparseCube(BaseModel):
@@ -118,17 +104,14 @@ class SparseCube(BaseModel):
 
 
 class Sentence(BaseModel):
-    articleId: str
-    sentId: int
     sentText: str
     entityMentions: List[Entity]
     relationMentions: List[Relation]
-    qualifierMentions: List[Qualifier] = []
-    wordpieceSentText: str
-    wordpieceTokensIndex: List[Span]
-    wordpieceSegmentIds: List[int]
-    jointLabelMatrix: List[List[int]]
-    quintupletMatrix: SparseCube = SparseCube.empty()
+    wordpieceSentText: Optional[str]
+    wordpieceTokensIndex: Optional[List[Span]]
+    wordpieceSegmentIds: Optional[List[int]]
+    jointLabelMatrix: Optional[List[List[int]]]
+    quintupletMatrix: Optional[SparseCube]
 
     def check_span_overlap(self) -> bool:
         entity_pos = [0 for _ in range(9999)]
@@ -144,26 +127,118 @@ class Sentence(BaseModel):
     def tokens(self) -> List[str]:
         return self.sentText.split(" ")
 
+    def merge(self, other):
+        if other is None:
+            return
 
-def load_sents(path: str) -> List[Sentence]:
-    with open(path) as f:
-        return [Sentence(**json.loads(line)) for line in tqdm(f.readlines(), desc=path)]
+        assert isinstance(other, Sentence)
+        assert other.sentText == self.sentText
+
+        ents = {e.json(): e for e in self.entityMentions}
+        for e in other.entityMentions:
+            ents[e.json()] = e
+        self.entityMentions = list(ents.values())
+
+        relations = {(r.head, r.tail, r.label): r for r in self.relationMentions}
+        for r in other.relationMentions:
+            key = (r.head, r.tail, r.label)
+            if key not in relations.keys():
+                relations[key] = r
+            else:
+                relations[key].merge(r)
+            assert relations[key] is not None
+
+        self.relationMentions = list(relations.values())
 
 
-def save_sents(sents: List[Sentence], path: str):
-    with open(path, "w") as f:
-        for s in sents:
-            f.write(s.json() + "\n")
+class Data(BaseModel):
+    sents: List[Sentence]
+
+    @classmethod
+    def load(cls, path: str):
+        with open(path) as f:
+            lines = f.readlines()
+
+        sents = [Sentence(**json.loads(line)) for line in tqdm(lines, desc=path)]
+        return cls(sents=sents)
+
+    def save(self, path: str):
+        Path(path).parent.mkdir(exist_ok=True, parents=True)
+        with open(path, "w") as f:
+            for s in self.sents:
+                raw = s.dict()
+                raw = {k: v for k, v in raw.items() if v is not None}
+                f.write(json.dumps(raw) + "\n")
+
+    def to_flat_quintuplets(self) -> List[FlatQuintuplet]:
+        outputs = []
+        for s in tqdm(self.sents, desc="to_flat_quintuplets"):
+            for r in s.relationMentions:
+                for q in r.qualifiers:
+                    flat = FlatQuintuplet(
+                        tokens=s.sentText.split(),
+                        head=r.head,
+                        tail=r.tail,
+                        relation=r.label,
+                        qualifier=q.label,
+                        value=q.offset,
+                    )
+                    outputs.append(flat)
+        return outputs
+
+    @classmethod
+    def load_from_flat_quintuplets(cls, path: str):
+        quintuplets = load_quintuplets(path)
+        mapping: Dict[str, Sentence] = {}
+
+        for q in tqdm(quintuplets, desc="load_from_flat_quintuplets"):
+            ents = [
+                Entity(offset=span, label="Entity")
+                for span in [q.head, q.tail, q.value]
+            ]
+            relation = Relation(
+                head=q.head,
+                tail=q.tail,
+                label=q.relation,
+                qualifiers=[Entity(offset=q.value, label=q.qualifier)],
+            )
+            sent = Sentence(
+                sentText=q.text, entityMentions=ents, relationMentions=[relation]
+            )
+            sent.merge(mapping.get(sent.sentText))
+            assert sent is not None
+            mapping[sent.sentText] = sent
+
+        data = cls(sents=list(mapping.values()))
+        old = set(flat.json() for flat in quintuplets)
+        new = set(flat.json() for flat in data.to_flat_quintuplets())
+        assert old == new
+        return data
+
+    def analyze(self):
+        relation_labels = []
+        qualifier_labels = []
+        for s in self.sents:
+            for r in s.relationMentions:
+                relation_labels.append(r.label)
+                for q in r.qualifiers:
+                    qualifier_labels.append(q.label)
+
+        info = dict(
+            sents=len(self.sents),
+            relations=len(relation_labels),
+            relation_labels=len(set(relation_labels)),
+            qualifiers=len(qualifier_labels),
+            qualifier_labels=len(set(qualifier_labels)),
+        )
+        print(json.dumps(info, indent=2))
 
 
 class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     tokens: np.ndarray
-    span2ent: Dict[Span, str]
-    span2rel: Dict[Tuple[Span, Span], int]
     joint_label_matrix: np.ndarray
     joint_label_preds: np.ndarray
     quintuplet_preds: SparseCube = SparseCube.empty()
-    separate_positions: List[int]
     all_separate_position_preds: List[int]
     all_ent_preds: Dict[Span, str]
     all_rel_preds: Dict[Tuple[Span, Span], str]
@@ -180,11 +255,8 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     def empty(cls):
         return cls(
             tokens=np.array([]),
-            span2ent={},
-            span2rel={},
             joint_label_matrix=np.empty(shape=(1,)),
             joint_label_preds=np.empty(shape=(1,)),
-            separate_positions=[],
             all_separate_position_preds=[],
             all_ent_preds={},
             all_rel_preds={},
@@ -203,112 +275,29 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
 
         span_to_ent = {}
         for span, label in self.all_ent_preds.items():
-            e = Entity(
-                emId=str((span, label)),
-                offset=span,
-                text=" ".join(tokens[slice(*span)]),
-                label=label,
-            )
+            e = Entity(offset=span, label=label)
             span_to_ent[span] = e
 
-        relations = []
+        pair_to_relation = {}
         for (head, tail), label in self.all_rel_preds.items():
-            head_id = span_to_ent[head].emId
-            tail_id = span_to_ent[tail].emId
-            r = Relation(
-                em1Id=head_id, em2Id=tail_id, em1Text="", em2Text="", label=label
-            )
-            relations.append(r)
+            r = Relation(head=head, tail=tail, label=label, qualifiers=[])
+            pair_to_relation[(head, tail)] = r
 
-        qualifiers = []
         for (head, tail, value), label in self.all_q_preds.items():
-            q = Qualifier(
-                em1Id=span_to_ent[head].emId,
-                em2Id=span_to_ent[tail].emId,
-                em3Id=span_to_ent[value].emId,
-                label=label,
-            )
-            qualifiers.append(q)
+            q = Entity(offset=value, label=label)
+            pair_to_relation[(head, tail)].qualifiers.append(q)
 
         return Sentence(
-            articleId=str((text, relations)),
             sentText=text,
             entityMentions=list(span_to_ent.values()),
-            relationMentions=relations,
-            qualifierMentions=qualifiers,
-            sentId=0,
-            wordpieceSentText="",
-            wordpieceTokensIndex=[],
-            wordpieceSegmentIds=[],
-            jointLabelMatrix=[],
-        )
-
-
-def make_sentences(path_in: str, path_out: str):
-    quintuplets = load_quintuplets(path_in)
-    groups: Dict[str, List[FlatQuintuplet]] = {}
-    for q in quintuplets:
-        groups.setdefault(q.text, []).append(q)
-
-    sentences: List[Sentence] = []
-    for lst in tqdm(list(groups.values())):
-        span_to_entity: Dict[Span, Entity] = {}
-        pair_to_relation: Dict[Tuple[Span, Span], Relation] = {}
-        triplet_to_qualifier: Dict[Tuple[Span, Span, Span], Qualifier] = {}
-
-        for q in lst:
-            for span in [q.head, q.tail, q.value]:
-                ent = Entity(
-                    offset=span,
-                    emId=str(span),
-                    text=" ".join(q.tokens[span[0] : span[1]]),
-                    label="Entity",
-                )
-                span_to_entity[span] = ent
-
-        for q in lst:
-            head = span_to_entity[q.head]
-            tail = span_to_entity[q.tail]
-            value = span_to_entity[q.value]
-            relation = Relation(
-                em1Id=head.emId,
-                em1Text=head.text,
-                em2Id=tail.emId,
-                em2Text=tail.text,
-                label=q.relation,
-            )
-            qualifier = Qualifier(
-                em1Id=head.emId, em2Id=tail.emId, em3Id=value.emId, label=q.qualifier
-            )
-            pair_to_relation[(head.offset, tail.offset)] = relation
-            triplet_to_qualifier[(head.offset, tail.offset, value.offset)] = qualifier
-
-        sent = Sentence(
-            articleId=lst[0].text,
-            sentId=0,
-            sentText=lst[0].text,
-            entityMentions=list(span_to_entity.values()),
             relationMentions=list(pair_to_relation.values()),
-            qualifierMentions=list(triplet_to_qualifier.values()),
-            wordpieceSentText="",
-            wordpieceTokensIndex=[],
-            wordpieceSegmentIds=[],
-            jointLabelMatrix=[],
-            quintupletMatrix=SparseCube.empty(),
         )
-        sentences.append(sent)
-
-    Path(path_out).parent.mkdir(exist_ok=True, parents=True)
-    with open(path_out, "w") as f:
-        for sent in tqdm(sentences):
-            f.write(sent.json() + "\n")
 
 
 def add_tokens(sent, tokenizer):
     cls = tokenizer.cls_token
     sep = tokenizer.sep_token
-    wordpiece_tokens = [cls]
-    wordpiece_tokens.append(sep)
+    wordpiece_tokens = [cls, sep]
     is_roberta = "roberta" in type(tokenizer).__name__.lower()
     if is_roberta:
         wordpiece_tokens.pop()  # RoBERTa format is [cls, tokens, sep, pad]
@@ -344,25 +333,21 @@ def add_joint_label(sent, label_vocab):
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["None"]
     seq_len = len(sent["sentText"].split(" "))
-    label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
+    label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
-    ent2offset = {}
     for ent in sent["entityMentions"]:
-        ent2offset[ent["emId"]] = ent["offset"]
         for i in range(ent["offset"][0], ent["offset"][1]):
             for j in range(ent["offset"][0], ent["offset"][1]):
                 label_matrix[i][j] = ent_rel_id[ent["label"]]
-    for rel in sent["relationMentions"]:
-        for i in range(ent2offset[rel["em1Id"]][0], ent2offset[rel["em1Id"]][1]):
-            for j in range(ent2offset[rel["em2Id"]][0], ent2offset[rel["em2Id"]][1]):
-                label_matrix[i][j] = ent_rel_id[rel["label"]]
 
     entries: List[Tuple[int, int, int, int]] = []
-    for q in sent["qualifierMentions"]:
-        for i in range(ent2offset[q["em1Id"]][0], ent2offset[q["em1Id"]][1]):
-            for j in range(ent2offset[q["em2Id"]][0], ent2offset[q["em2Id"]][1]):
-                for k in range(ent2offset[q["em3Id"]][0], ent2offset[q["em3Id"]][1]):
-                    entries.append((i, j, k, ent_rel_id[q["label"]]))
+    for rel in sent["relationMentions"]:
+        for i in range(rel["head"][0], rel["head"][1]):
+            for j in range(rel["tail"][0], rel["tail"][1]):
+                label_matrix[i][j] = ent_rel_id[rel["label"]]
+                for q in rel["qualifiers"]:
+                    for k in range(q["offset"][0], q["offset"][1]):
+                        entries.append((i, j, k, ent_rel_id[q["label"]]))
 
     sent["jointLabelMatrix"] = label_matrix
     sent["quintupletMatrix"] = SparseCube(
@@ -375,7 +360,7 @@ def add_tag_joint_label(sent, label_vocab):
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["O"]
     seq_len = len(sent["sentText"].split(" "))
-    label_matrix = [[none_id for j in range(seq_len)] for i in range(seq_len)]
+    label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
     spans = [Entity(**e).as_tuple() for e in sent["entityMentions"]]
     encoder = BioEncoder()
@@ -432,7 +417,9 @@ def make_label_file(pattern_in: str, path_out: str):
             sents.extend([Sentence(**json.loads(line)) for line in tqdm(f)])
 
     relations = sorted(set(r.label for s in sents for r in s.relationMentions))
-    qualifiers = sorted(set(q.label for s in sents for q in s.qualifierMentions))
+    qualifiers = sorted(
+        set(q.label for s in sents for r in s.relationMentions for q in r.qualifiers)
+    )
     labels = ["None", "Entity"] + qualifiers + sorted(set(relations) - set(qualifiers))
     label_map = {name: i for i, name in enumerate(labels)}
     print(dict(relations=len(relations), qualifiers=len(qualifiers)))
@@ -458,7 +445,7 @@ def make_tag_label_file(pattern_in: str, path_out: str):
         with open(path) as f:
             for line in tqdm(f):
                 s = Sentence(**json.loads(line))
-                for q in s.qualifierMentions:
+                for q in [q for r in s.relationMentions for q in r.qualifiers]:
                     tags.append("B-" + q.label)
                     tags.append("I-" + q.label)
                     qualifiers.append(q.label)  # Dataset reader needs it
@@ -477,29 +464,17 @@ def make_tag_label_file(pattern_in: str, path_out: str):
 
 
 def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
-    id_to_entity = {e.emId: e for e in sent.entityMentions}
-    pair_to_qualifiers = {}
-    for q in sent.qualifierMentions:
-        pair_to_qualifiers.setdefault((q.em1Id, q.em2Id), []).append(q)
-
     outputs = []
     for r in sent.relationMentions:
-        head = id_to_entity[r.em1Id]
-        tail = id_to_entity[r.em2Id]
-        parts = [sent.sentText, head.text, r.label, tail.text]
+        head = " ".join(sent.tokens[slice(*r.head)])
+        tail = " ".join(sent.tokens[slice(*r.tail)])
+        parts = [sent.sentText, head, r.label, tail]
         text = " | ".join(parts)
-        ents = []
-        for q in pair_to_qualifiers.get((r.em1Id, r.em2Id), []):
-            e = id_to_entity[q.em3Id].copy(deep=True)
-            e.label = q.label
-            ents.append(e)
 
         new = sent.copy(deep=True)
-        new.articleId = text
         new.sentText = text
-        new.entityMentions = ents
+        new.entityMentions = r.qualifiers
         new.relationMentions = []
-        new.qualifierMentions = []
         outputs.append(new)
 
     return outputs
@@ -510,6 +485,7 @@ def load_raw_preds(path: str) -> List[RawPred]:
     with open(path, "rb") as f:
         raw = pickle.load(f)
         for r in raw:
+            # noinspection Pydantic
             p = RawPred(**r)
             p.assert_valid()
             raw_preds.append(p)
@@ -526,48 +502,24 @@ def process_many(
     if Path(dir_temp).exists():
         shutil.rmtree(dir_temp)
     for path in sorted(Path(dir_in).glob("*.json")):
-        make_sentences(str(path), str(Path(dir_temp) / path.name))
+        data = Data.load(str(path))
+        data.analyze()
+        data.save(str(Path(dir_temp) / path.name))
 
     path_label = str(Path(dir_out) / "label.json")
     if mode == "tags":
-        make_tag_label_file("temp/*.json", path_label)
+        make_tag_label_file(f"{dir_temp}/*.json", path_label)
     else:
-        make_label_file("temp/*.json", path_label)
+        make_label_file(f"{dir_temp}/*.json", path_label)
     for path in sorted(Path(dir_temp).glob("*.json")):
         process(
             str(path), str(Path(dir_out) / path.name), path_label, mode=mode, **kwargs
         )
 
 
-def make_labeled_train_split(dir_in: str, dir_out: str, num_train: int, seed: int = 0):
-    """Partition the existing dev/test into labeled train/dev/test"""
-    if Path(dir_out).exists():
-        shutil.rmtree(dir_out)
-    shutil.copytree(dir_in, dir_out)
-    with open(Path(dir_in) / "dev.json") as f:
-        dev = [Sentence(**json.loads(line)) for line in f]
-    with open(Path(dir_in) / "test.json") as f:
-        test = [Sentence(**json.loads(line)) for line in f]
-
-    random.seed(0)
-    total = len(dev) + len(test)
-    indices_dev = random.sample(range(len(dev)), k=num_train // 2)
-    indices_test = random.sample(range(len(test)), k=num_train // 2)
-    train = [dev[i] for i in indices_dev] + [test[i] for i in indices_test]
-    dev = [x for i, x in enumerate(dev) if i not in indices_dev]
-    test = [x for i, x in enumerate(test) if i not in indices_test]
-    assert len(train) + len(dev) + len(test) == total
-
-    for key, sents in dict(train=train, dev=dev, test=test).items():
-        print(dict(key=key, sents=len(sents)))
-        path = Path(dir_out) / f"{key}.json"
-        with open(path, "w") as f:
-            for s in sents:
-                f.write(s.json() + "\n")
-
-
 class BioEncoder:
     def run(self, spans: List[Tuple[int, int, str]], length: int) -> List[str]:
+        assert self is not None
         tags = ["O" for _ in range(length)]
         for start, end, label in spans:
             assert start < end
@@ -578,6 +530,7 @@ class BioEncoder:
         return tags
 
     def decode(self, tags: List[str]) -> List[Tuple[int, int, str]]:
+        assert self is not None
         parts = []
         for i, t in enumerate(tags):
             assert t[0] in "BIO"
@@ -608,31 +561,24 @@ def test_bio():
     assert spans == preds
 
 
-def analyze_sents(sents: List[Sentence]):
-    info = dict(
-        sents=len(sents),
-        relations=len(set(r.label for s in sents for r in s.relationMentions)),
-        qualifiers=len(set(q.label for s in sents for q in s.qualifierMentions)),
-    )
-    print(json.dumps(info, indent=2))
+def test_data(path: str):
+    data = Data.load_from_flat_quintuplets(path)
+    data.analyze()
+
+
+def convert_flat(path_in: str, path_out: str):
+    data = Data.load_from_flat_quintuplets(path_in)
+    data.analyze()
+    data.save(path_out)
 
 
 """
-p data_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10/
-p data_process.py process_many ../quintuplet/outputs/data/flat_min_10/ data/q10_tags/ --mode tags
+p data_process.py convert_flat data/flat_min_10/dev.json data/hyperred/dev.json
+p data_process.py convert_flat data/flat_min_10/test.json data/hyperred/test.json
+p data_process.py convert_flat data/flat_min_10/train.json data/hyperred/train.json
 
-p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred.json data/q10/gen_pred.json
-p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_1.json data/q10/gen_1.json
-p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_2.json data/q10/gen_2.json
-p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_3.json data/q10/gen_3.json
-p data_process.py make_sentences ../quintuplet/outputs/data/flat_min_10/pred_seed_4.json data/q10/gen_4.json
-
-################################################################################
-
-p data_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0/
-p data_process.py process_many ../quintuplet/outputs/data/flat_min_0/ data/q0_tags/ --mode tags
-
-################################################################################
+p data_process.py process_many data/hyperred/ data/processed/
+p data_process.py process_many data/hyperred/ data/processed_tags/ --mode tags
 
 """
 

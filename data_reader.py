@@ -384,6 +384,7 @@ class DataReader:
                         continue
                 sentence.update(results)
 
+                line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
                 if len(sentence["tokens"]) != len(sentence["wordpiece_tokens_index"]):
                     logger.error(
                         "article id: {} sentence id: {} wordpiece_tokens_index length is not equal to tokens.".format(
@@ -429,6 +430,7 @@ class DataReader:
         """
 
         results = {}
+        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
 
         if "sentText" not in line:
             logger.error(
@@ -459,6 +461,7 @@ class DataReader:
         """
 
         results = {}
+        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
 
         if (
             "wordpieceSentText" not in line
@@ -492,11 +495,11 @@ class DataReader:
         Returns:
             bool -- execute state
             dict -- ent2rel: entity span mapping to entity label,
-            span2rel: two entity span mapping to relation label,
             joint_label_matrix: joint entity relation label matrix
         """
 
         results = {}
+        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
 
         if "entityMentions" not in line:
             logger.error(
@@ -506,36 +509,6 @@ class DataReader:
             )
             return False, results
 
-        idx2ent = {}
-        span2ent = {}
-
-        separate_positions = []
-        for entity in line["entityMentions"]:
-            st, ed = entity["offset"]
-            if st != 0:
-                separate_positions.append(st - 1)
-            if ed != sentence_length:
-                separate_positions.append(ed - 1)
-            idx2ent[entity["emId"]] = ((st, ed), entity["text"])
-            if (
-                st >= ed
-                or st < 0
-                or st > sentence_length
-                or ed < 0
-                or ed > sentence_length
-            ):
-                logger.error(
-                    "article id: {} sentence id: {} offset error'.".format(
-                        line["articleId"], line["sentId"]
-                    )
-                )
-                return False, results
-
-            span2ent[(st, ed)] = entity["label"]
-
-        results["separate_positions"] = sorted(separate_positions)
-        results["span2ent"] = span2ent
-
         if "relationMentions" not in line:
             logger.error(
                 "article id: {} sentence id: {} doesn't contain 'relationMentions'.".format(
@@ -543,42 +516,6 @@ class DataReader:
                 )
             )
             return False, results
-
-        span2rel = {}
-        for relation in line["relationMentions"]:
-            if relation["em1Id"] not in idx2ent or relation["em2Id"] not in idx2ent:
-                logger.error(
-                    "article id: {} sentence id: {} entity not exists .".format(
-                        line["articleId"], line["sentId"]
-                    )
-                )
-                continue
-
-            entity1_span, entity1_text = idx2ent[relation["em1Id"]]
-            entity2_span, entity2_text = idx2ent[relation["em2Id"]]
-
-            if (
-                entity1_text != relation["em1Text"]
-                or entity2_text != relation["em2Text"]
-            ):
-                logger.error(
-                    "article id: {} sentence id: {} entity text doesn't match realtiaon text.".format(
-                        line["articleId"], line["sentId"]
-                    )
-                )
-                return False, None
-
-            span2rel[(entity1_span, entity2_span)] = relation["label"]
-
-        span2qualifier = {}
-        for qualifier in line["qualifierMentions"]:
-            e1_span, e1_text = idx2ent[qualifier["em1Id"]]
-            e2_span, e2_text = idx2ent[qualifier["em2Id"]]
-            e3_span, e3_text = idx2ent[qualifier["em3Id"]]
-            span2qualifier[(e1_span, e2_span, e3_span)] = qualifier["label"]
-
-        results["span2rel"] = span2rel
-        results["span2qualifier"] = span2qualifier
 
         if "jointLabelMatrix" not in line:
             logger.error(

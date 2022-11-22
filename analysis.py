@@ -1,4 +1,3 @@
-import ast
 import json
 import os
 import random
@@ -18,18 +17,11 @@ from transformers import BertTokenizer
 from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from data_process import (
-    RawPred,
-    Sentence,
-    SparseCube,
-    load_raw_preds,
-    load_sents,
-    save_sents,
-)
+from data_process import RawPred, Sentence, SparseCube, load_raw_preds, Data
 from data_reader import Dataset
 from modeling import CubeRE, decode_nonzero_cuboids, decode_nonzero_spans, BertLinear
-from training import evaluate, load_model, prepare_inputs, process_outputs, score_preds
 from scoring import QuintupletScorer
+from training import evaluate, load_model, prepare_inputs, process_outputs, score_preds
 
 
 def test_lengths(
@@ -205,7 +197,7 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print(dict(lengths=np.mean(lengths)))
 
     print("\nHow many quintuplets per sent on average?")
-    lengths = [len(s.qualifierMentions) for s in sents]
+    lengths = [sum(len(r.qualifiers) for r in s.relationMentions) for s in sents]
     print(dict(lengths=np.mean(lengths)))
 
     print("\nManually analyze cube")
@@ -214,16 +206,14 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     for s in sents:
         seq_len = len(s.sentText.split())
         cube = np.zeros(shape=(seq_len, seq_len, seq_len))
-        id_to_span = {e.emId: e.offset for e in s.entityMentions}
-        for q in s.qualifierMentions:
-            head = id_to_span[q.em1Id]
-            tail = id_to_span[q.em2Id]
-            value = id_to_span[q.em3Id]
-            assert len(set([head, tail, value])) == 3
-            for i in range(*head):
-                for j in range(*tail):
-                    for k in range(*value):
-                        cube[i, j, k] = 1
+        for r in s.relationMentions:
+            for q in r.qualifiers:
+                head, tail, value = r.head, r.tail, q.offset
+                assert len({head, tail, value}) == 3
+                for i in range(*head):
+                    for j in range(*tail):
+                        for k in range(*value):
+                            cube[i, j, k] = 1
         sizes.append(cube.size)
         counts.append(cube.sum())
     print(
@@ -250,7 +240,7 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     top_k = 50
     qualifiers = []
     for s in sents:
-        for q in s.qualifierMentions:
+        for q in [q for r in s.relationMentions for q in r.qualifiers]:
             qualifiers.append(q.label)
     counter = Counter(qualifiers)
     threshold = sorted(counter.values())[-top_k]
@@ -284,7 +274,9 @@ def test_decode_nonzero_spans():
 
 def analyze_sents(sents: List[Sentence]) -> dict:
     relations = [r.label for s in sents for r in s.relationMentions]
-    qualifiers = [q.label for s in sents for q in s.qualifierMentions]
+    qualifiers = [
+        q.label for s in sents for r in s.relationMentions for q in r.qualifiers
+    ]
     entity_labels = [e.label for s in sents for e in s.entityMentions]
     info = dict(
         triplets=len(relations),
@@ -330,8 +322,9 @@ def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
     for i, c in enumerate(tqdm(cubes, desc="nonzero")):
         assert c.nonzero().shape[0] > 0
         cuboids = decode_nonzero_cuboids(c)
-        if len(sents[i].qualifierMentions) != len(cuboids):
-            pprint(sents[i].qualifierMentions)
+        num_qualifiers = sum(len(r.qualifiers) for r in sents[i].relationMentions)
+        if num_qualifiers != len(cuboids):
+            pprint(sents[i])
             pprint(cuboids)
             print()
 
@@ -457,15 +450,11 @@ def test_adjacent_qualifiers(path: str = "data/q10/test.json"):
     total = 0
     selected = 0
     for s in sents:
-        groups = {}
-        for q in s.qualifierMentions:
-            groups.setdefault((q.em1Id, q.em2Id), []).append(q)
-        for lst in groups.values():
+        for r in s.relationMentions:
             tags = [0 for _ in s.sentText.split()]
-            for q in lst:
-                span = ast.literal_eval(q.em3Id)
+            for q in r.qualifiers:
                 total += 1
-                for i in range(span[0], span[1]):
+                for i in range(*q.offset):
                     if tags[i] == 1:
                         selected += 1
                         break
@@ -516,12 +505,12 @@ def test_ign_score(
     path_train: str = "data/q10/train.json",
 ):
     # score_preds(path_pred, path_gold)
-    preds = load_sents(path_pred)
-    sents = load_sents(path_gold)
+    preds = Data.load(path_pred).sents
+    sents = Data.load(path_gold).sents
 
     facts = set(
         q.as_texts(s.tokens, s.relationMentions)
-        for s in load_sents(path_train)
+        for s in Data.load(path_train).sents
         for q in s.qualifierMentions
     )
 
@@ -539,8 +528,8 @@ def test_ign_score(
             if q.as_texts(s.tokens, s.relationMentions) not in facts
         ]
 
-    save_sents(sents, "temp_gold.json")
-    save_sents(preds, "temp_pred.json")
+    Data(sents=sents).save("temp_gold.json")
+    Data(sents=preds).save("temp_pred.json")
     score_preds("temp_pred.json", "temp_gold.json")
     os.remove("temp_pred.json")
     os.remove("temp_gold.json")
@@ -598,8 +587,8 @@ def filter_qualifiers(s: Sentence, label: str) -> Sentence:
 def test_separate_eval(path_pred: str, path_gold: str):
     path_temp_pred = "temp_pred.json"
     path_temp_gold = "temp_gold.json"
-    sents_pred = load_sents(path_pred)
-    sents_gold = load_sents(path_gold)
+    sents_pred = Data.load(path_pred).sents
+    sents_gold = Data.load(path_gold).sents
 
     records = []
     for label in "location time number part-whole role".split():
@@ -607,8 +596,8 @@ def test_separate_eval(path_pred: str, path_gold: str):
         # gold = sents_gold
         pred = [filter_qualifiers(s, label) for s in sents_pred]
         gold = [filter_qualifiers(s, label) for s in sents_gold]
-        save_sents(pred, path_temp_pred)
-        save_sents(gold, path_temp_gold)
+        Data(sents=pred).save(path_temp_pred)
+        Data(sents=gold).save(path_temp_gold)
         r = score_preds(path_temp_pred, path_temp_gold)
         r = dict(label=label, score=r["quintuplet"]["f1"])
         records.append(r)
@@ -745,7 +734,7 @@ def test_nyt_data(pattern: str = "data/PtrNetDecoding4JERE/*"):
 def test_unique_facts(folder: str = "data/q10"):
     for data_split in "train dev test".split():
         path = Path(folder) / f"{data_split}.json"
-        sents = load_sents(str(path))
+        sents = Data.load(str(path)).sents
         facts = []
         entities = []
         lengths = []
@@ -774,7 +763,7 @@ def test_unique_facts(folder: str = "data/q10"):
 
 
 def sent_to_tuples(s: Sentence) -> Set[Tuple[str, str, str, str, str]]:
-    return set(q.as_texts(s.tokens, s.relationMentions) for q in s.qualifierMentions)
+    return set(tup for r in s.relationMentions for tup in r.as_tuples(s.tokens))
 
 
 def test_cases(
@@ -784,10 +773,10 @@ def test_cases(
     path_gold: str = "data/q10/test.json",
 ):
     scorer = QuintupletScorer()
-    sents_gold = load_sents(path_gold)
-    sents_cube = scorer.match_gold_to_pred(load_sents(path_cube), sents_gold)
-    sents_pipe = scorer.match_gold_to_pred(load_sents(path_pipe), sents_gold)
-    sents_gen = scorer.match_gold_to_pred(load_sents(path_gen), sents_gold)
+    sents_gold = Data.load(path_gold).sents
+    sents_cube = scorer.match_gold_to_pred(Data.load(path_cube).sents, sents_gold)
+    sents_pipe = scorer.match_gold_to_pred(Data.load(path_pipe).sents, sents_gold)
+    sents_gen = scorer.match_gold_to_pred(Data.load(path_gen).sents, sents_gold)
 
     records = []
     for i, s in enumerate(sents_gold):
@@ -871,8 +860,9 @@ def test_decoding(
         )
         all_outputs.extend(process_outputs(inputs, outputs))
 
+    # noinspection Pydantic
     sents = [RawPred(**r).as_sentence(model.vocab) for r in all_outputs]
-    save_sents(sents, "temp.json")
+    Data(sents=sents).save("temp.json")
     score_preds("temp.json", path_gold)
     os.remove("temp.json")
 
@@ -882,8 +872,8 @@ def test_decoding(
 
 
 def test_preds(path_pred: str, path_gold: str):
-    sents_pred = load_sents(path_pred)
-    sents_gold = load_sents(path_gold)
+    sents_pred = Data.load(path_pred).sents
+    sents_gold = Data.load(path_gold).sents
     text_to_gold = {s.sentText: s for s in sents_gold}
     limit = 10
 
@@ -939,7 +929,7 @@ def delete_files(pattern: str, testing: bool = False):
 def test_tokenizers(name: str = "bert-base-uncased", path: str = "data/q10"):
     tok1 = BertTokenizer.from_pretrained(name)
     tok2 = AutoTokenizer.from_pretrained(name)
-    sents = load_sents(path)
+    sents = Data.load(path).sents
     for s in sents:
         x1 = tok1(s.sentText)
         x2 = tok2(s.sentText)

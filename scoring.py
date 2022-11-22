@@ -22,11 +22,11 @@ class StrictScorer:
     def make_sent_tuples(
         self, s: Sentence
     ) -> List[Tuple[Tuple[int, int, str], Tuple[int, int, str], str]]:
-        id_to_entity = {e.emId: e for e in s.entityMentions}
+        id_to_entity = {e.offset: e for e in s.entityMentions}
         tuples = []
         for r in s.relationMentions:
-            head = id_to_entity[r.em1Id]
-            tail = id_to_entity[r.em2Id]
+            head = id_to_entity[r.head]
+            tail = id_to_entity[r.tail]
             t = (
                 (head.offset[0], head.offset[1], head.label),
                 (tail.offset[0], tail.offset[1], tail.label),
@@ -38,6 +38,7 @@ class StrictScorer:
     def match_gold_to_pred(
         self, pred: List[Sentence], gold: List[Sentence]
     ) -> List[Sentence]:
+        assert self is not None
         text_to_pred = {p.sentText: p for p in pred}
         empty = RawPred.empty().as_sentence(None)
         matched = [text_to_pred.get(s.sentText, empty) for s in gold]
@@ -90,24 +91,17 @@ class QuintupletScorer(StrictScorer):
     def make_sent_tuples(
         self, s: Sentence
     ) -> List[Tuple[int, int, int, int, int, int, str, str]]:
-        id_to_entity = {e.emId: e for e in s.entityMentions}
-        pair_to_relation = {(r.em1Id, r.em2Id): r.label for r in s.relationMentions}
-
         tuples = []
-        for q in s.qualifierMentions:
-            head = id_to_entity[q.em1Id]
-            tail = id_to_entity[q.em2Id]
-            value = id_to_entity[q.em3Id]
-            relation = pair_to_relation.get((q.em1Id, q.em2Id))
-            if relation is not None:
+        for r in s.relationMentions:
+            for q in r.qualifiers:
                 t = (
-                    head.offset[0],
-                    head.offset[1],
-                    tail.offset[0],
-                    tail.offset[1],
-                    value.offset[0],
-                    value.offset[1],
-                    relation,
+                    r.head[0],
+                    r.head[1],
+                    r.tail[0],
+                    r.tail[1],
+                    q.offset[0],
+                    q.offset[1],
+                    r.label,
                     q.label,
                 )
                 tuples.append(t)
