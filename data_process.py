@@ -22,10 +22,6 @@ class FlatQuintuplet(BaseModel):
     relation: str
     qualifier: str
 
-    @property
-    def text(self) -> str:
-        return " ".join(self.tokens)
-
 
 def load_quintuplets(path: str) -> List[FlatQuintuplet]:
     with open(path) as f:
@@ -104,7 +100,7 @@ class SparseCube(BaseModel):
 
 
 class Sentence(BaseModel):
-    text: str
+    tokens: List[str]
     entities: List[Entity]
     relations: List[Relation]
     wordpieceSentText: Optional[str]
@@ -124,8 +120,8 @@ class Sentence(BaseModel):
         return False
 
     @property
-    def tokens(self) -> List[str]:
-        return self.text.split(" ")
+    def text(self) -> str:
+        return " ".join(self.tokens)
 
     def merge(self, other):
         if other is None:
@@ -176,7 +172,7 @@ class Data(BaseModel):
             for r in s.relations:
                 for q in r.qualifiers:
                     flat = FlatQuintuplet(
-                        tokens=s.text.split(),
+                        tokens=s.tokens,
                         head=r.head,
                         tail=r.tail,
                         relation=r.label,
@@ -201,7 +197,7 @@ class Data(BaseModel):
                 label=q.relation,
                 qualifiers=[Entity(span=q.value, label=q.qualifier)],
             )
-            sent = Sentence(text=q.text, entities=ents, relations=[relation])
+            sent = Sentence(tokens=q.tokens, entities=ents, relations=[relation])
             sent.merge(mapping.get(sent.text))
             assert sent is not None
             mapping[sent.text] = sent
@@ -268,7 +264,6 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
     def as_sentence(self, vocab) -> Sentence:
         tokens = [vocab.get_token_from_index(i, "tokens") for i in self.tokens]
         tokens = [t for t in tokens if t != vocab.DEFAULT_PAD_TOKEN]
-        text = " ".join(tokens)
 
         span_to_ent = {}
         for span, label in self.all_ent_preds.items():
@@ -285,7 +280,7 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
             pair_to_relation[(head, tail)].qualifiers.append(q)
 
         return Sentence(
-            text=text,
+            tokens=tokens,
             entities=list(span_to_ent.values()),
             relations=list(pair_to_relation.values()),
         )
@@ -304,7 +299,7 @@ def add_tokens(sent, tokenizer):
 
     wordpiece_tokens_index = []
     cur_index = len(wordpiece_tokens)
-    for token in sent["text"].split(" "):
+    for token in sent["tokens"]:
         if is_roberta:
             token = " " + token  # RoBERTa is space-sensitive
         tokenized_token = list(tokenizer.tokenize(token))
@@ -329,7 +324,7 @@ def add_joint_label(sent, label_vocab):
 
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["None"]
-    seq_len = len(sent["text"].split(" "))
+    seq_len = len(sent["tokens"])
     label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
     for ent in sent["entities"]:
@@ -356,7 +351,7 @@ def add_joint_label(sent, label_vocab):
 def add_tag_joint_label(sent, label_vocab):
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["O"]
-    seq_len = len(sent["text"].split(" "))
+    seq_len = len(sent["tokens"])
     label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
     spans = [Entity(**e).as_tuple() for e in sent["entities"]]
@@ -469,7 +464,7 @@ def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
         text = " | ".join(parts)
 
         new = sent.copy(deep=True)
-        new.text = text
+        new.tokens = text.split()
         new.entities = r.qualifiers
         new.relations = []
         outputs.append(new)
@@ -561,6 +556,7 @@ def test_bio():
 def test_data(path: str):
     data = Data.load_from_flat_quintuplets(path)
     data.analyze()
+    print(dict(tokens=data.sents[0].tokens))
 
 
 def convert_flat(path_in: str, path_out: str):

@@ -384,6 +384,7 @@ class DataReader:
                         continue
                 sentence.update(results)
 
+                line["text"] = " ".join(line["tokens"])
                 line["articleId"], line["sentId"] = line["text"], line["text"]
                 if len(sentence["tokens"]) != len(sentence["wordpiece_tokens_index"]):
                     logger.error(
@@ -430,6 +431,7 @@ class DataReader:
         """
 
         results = {}
+        line["text"] = " ".join(line["tokens"])
         line["articleId"], line["sentId"] = line["text"], line["text"]
 
         if "text" not in line:
@@ -461,6 +463,7 @@ class DataReader:
         """
 
         results = {}
+        line["text"] = " ".join(line["tokens"])
         line["articleId"], line["sentId"] = line["text"], line["text"]
 
         if (
@@ -499,6 +502,7 @@ class DataReader:
         """
 
         results = {}
+        line["text"] = " ".join(line["tokens"])
         line["articleId"], line["sentId"] = line["text"], line["text"]
 
         if "entities" not in line:
