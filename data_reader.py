@@ -384,7 +384,7 @@ class DataReader:
                         continue
                 sentence.update(results)
 
-                line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
+                line["articleId"], line["sentId"] = line["text"], line["text"]
                 if len(sentence["tokens"]) != len(sentence["wordpiece_tokens_index"]):
                     logger.error(
                         "article id: {} sentence id: {} wordpiece_tokens_index length is not equal to tokens.".format(
@@ -430,22 +430,22 @@ class DataReader:
         """
 
         results = {}
-        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
+        line["articleId"], line["sentId"] = line["text"], line["text"]
 
-        if "sentText" not in line:
+        if "text" not in line:
             logger.error(
-                "article id: {} sentence id: {} doesn't contain 'sentText'.".format(
+                "article id: {} sentence id: {} doesn't contain 'text'.".format(
                     line["articleId"], line["sentId"]
                 )
             )
             return False, results
 
-        results["text"] = line["sentText"]
+        results["text"] = line["text"]
 
         if "tokens" in line:
             results["tokens"] = line["tokens"]
         else:
-            results["tokens"] = line["sentText"].strip().split(" ")
+            results["tokens"] = line["text"].strip().split(" ")
 
         return True, results
 
@@ -461,7 +461,7 @@ class DataReader:
         """
 
         results = {}
-        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
+        line["articleId"], line["sentId"] = line["text"], line["text"]
 
         if (
             "wordpieceSentText" not in line
@@ -499,19 +499,19 @@ class DataReader:
         """
 
         results = {}
-        line["articleId"], line["sentId"] = line["sentText"], line["sentText"]
+        line["articleId"], line["sentId"] = line["text"], line["text"]
 
-        if "entityMentions" not in line:
+        if "entities" not in line:
             logger.error(
-                "article id: {} sentence id: {} doesn't contain 'entityMentions'.".format(
+                "article id: {} sentence id: {} doesn't contain 'entities'.".format(
                     line["articleId"], line["sentId"]
                 )
             )
             return False, results
 
-        if "relationMentions" not in line:
+        if "relations" not in line:
             logger.error(
-                "article id: {} sentence id: {} doesn't contain 'relationMentions'.".format(
+                "article id: {} sentence id: {} doesn't contain 'relations'.".format(
                     line["articleId"], line["sentId"]
                 )
             )

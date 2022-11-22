@@ -117,7 +117,7 @@ def test_data(path: str = "data/ACE2005/test.json"):
     print(dict(sents=len(sents)))
 
     for s in sents:
-        if s.relationMentions:
+        if s.relations:
             for k, v in s.dict().items():
                 print(k, str(v)[:120])
             break
@@ -131,7 +131,7 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
         sents = [Sentence(**json.loads(line)) for line in tqdm(f)]
 
     print("\nHow many entities per sentence?")
-    lengths = [len(s.entityMentions) for s in sents]
+    lengths = [len(s.entities) for s in sents]
     print(np.mean(lengths))
 
     print("\nWhat fraction of the cubes (quintuplets) are empty?")
@@ -169,7 +169,7 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print(1 - (filled / total))
 
     print("\nWhat is the average sentence length?")
-    lengths = [len(s.sentText.split()) for s in sents]
+    lengths = [len(s.text.split()) for s in sents]
     print(sum(lengths) / len(lengths))
 
     print("\nWhat is the average cube length?")
@@ -179,9 +179,9 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print("\nWhat is the average number of entity tokens in a sentence?")
     lengths = []
     for s in sents:
-        tags = [0 for _ in s.sentText.split()]
-        for e in s.entityMentions:
-            for i in range(e.offset[0], e.offset[1]):
+        tags = [0 for _ in s.text.split()]
+        for e in s.entities:
+            for i in range(e.span[0], e.span[1]):
                 tags[i] = 1
         lengths.append(sum(tags))
         assert list(np.diagonal(np.array(s.jointLabelMatrix))) == tags
@@ -190,25 +190,25 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     print("\nWhat is average entity length?")
     lengths = []
     for s in sents:
-        for e in s.entityMentions:
-            start, end = e.offset
+        for e in s.entities:
+            start, end = e.span
             assert end > start
             lengths.append(end - start)
     print(dict(lengths=np.mean(lengths)))
 
     print("\nHow many quintuplets per sent on average?")
-    lengths = [sum(len(r.qualifiers) for r in s.relationMentions) for s in sents]
+    lengths = [sum(len(r.qualifiers) for r in s.relations) for s in sents]
     print(dict(lengths=np.mean(lengths)))
 
     print("\nManually analyze cube")
     sizes = []
     counts = []
     for s in sents:
-        seq_len = len(s.sentText.split())
+        seq_len = len(s.text.split())
         cube = np.zeros(shape=(seq_len, seq_len, seq_len))
-        for r in s.relationMentions:
+        for r in s.relations:
             for q in r.qualifiers:
-                head, tail, value = r.head, r.tail, q.offset
+                head, tail, value = r.head, r.tail, q.span
                 assert len({head, tail, value}) == 3
                 for i in range(*head):
                     for j in range(*tail):
@@ -226,11 +226,11 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     selected = []
     seen = set()
     for s in sents:
-        tags = [0 for _ in s.sentText.split()]
-        for e in s.entityMentions:
-            for i in range(e.offset[0], e.offset[1]):
-                if tags[i] == 1 and s.sentText not in seen:
-                    seen.add(s.sentText)
+        tags = [0 for _ in s.text.split()]
+        for e in s.entities:
+            for i in range(e.span[0], e.span[1]):
+                if tags[i] == 1 and s.text not in seen:
+                    seen.add(s.text)
                     selected.append(s)
                 else:
                     tags[i] = 1
@@ -240,7 +240,7 @@ def test_quintuplet_sents(path: str = "data/quintuplet/dev.json"):
     top_k = 50
     qualifiers = []
     for s in sents:
-        for q in [q for r in s.relationMentions for q in r.qualifiers]:
+        for q in [q for r in s.relations for q in r.qualifiers]:
             qualifiers.append(q.label)
     counter = Counter(qualifiers)
     threshold = sorted(counter.values())[-top_k]
@@ -273,11 +273,9 @@ def test_decode_nonzero_spans():
 
 
 def analyze_sents(sents: List[Sentence]) -> dict:
-    relations = [r.label for s in sents for r in s.relationMentions]
-    qualifiers = [
-        q.label for s in sents for r in s.relationMentions for q in r.qualifiers
-    ]
-    entity_labels = [e.label for s in sents for e in s.entityMentions]
+    relations = [r.label for s in sents for r in s.relations]
+    qualifiers = [q.label for s in sents for r in s.relations for q in r.qualifiers]
+    entity_labels = [e.label for s in sents for e in s.entities]
     info = dict(
         triplets=len(relations),
         quintuplets=len(qualifiers),
@@ -307,7 +305,7 @@ def compare_tag_data(
     correct_spans = []
     for s in sents_tag:
         labels = np.array(s.jointLabelMatrix).diagonal()
-        gold = set(e.offset for e in s.entityMentions)
+        gold = set(e.span for e in s.entities)
         spans = decode_nonzero_spans([int(x) for x in labels])
         decoded_spans.extend(spans)
         correct_spans.extend([sp for sp in spans if sp in gold])
@@ -322,7 +320,7 @@ def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
     for i, c in enumerate(tqdm(cubes, desc="nonzero")):
         assert c.nonzero().shape[0] > 0
         cuboids = decode_nonzero_cuboids(c)
-        num_qualifiers = sum(len(r.qualifiers) for r in sents[i].relationMentions)
+        num_qualifiers = sum(len(r.qualifiers) for r in sents[i].relations)
         if num_qualifiers != len(cuboids):
             pprint(sents[i])
             pprint(cuboids)
@@ -450,11 +448,11 @@ def test_adjacent_qualifiers(path: str = "data/q10/test.json"):
     total = 0
     selected = 0
     for s in sents:
-        for r in s.relationMentions:
-            tags = [0 for _ in s.sentText.split()]
+        for r in s.relations:
+            tags = [0 for _ in s.text.split()]
             for q in r.qualifiers:
                 total += 1
-                for i in range(*q.offset):
+                for i in range(*q.span):
                     if tags[i] == 1:
                         selected += 1
                         break
@@ -509,7 +507,7 @@ def test_ign_score(
     sents = Data.load(path_gold).sents
 
     facts = set(
-        q.as_texts(s.tokens, s.relationMentions)
+        q.as_texts(s.tokens, s.relations)
         for s in Data.load(path_train).sents
         for q in s.qualifierMentions
     )
@@ -518,14 +516,14 @@ def test_ign_score(
         s.qualifierMentions = [
             q
             for q in s.qualifierMentions
-            if q.as_texts(s.tokens, s.relationMentions) not in facts
+            if q.as_texts(s.tokens, s.relations) not in facts
         ]
 
     for s in preds:
         s.qualifierMentions = [
             q
             for q in s.qualifierMentions
-            if q.as_texts(s.tokens, s.relationMentions) not in facts
+            if q.as_texts(s.tokens, s.relations) not in facts
         ]
 
     Data(sents=sents).save("temp_gold.json")
@@ -577,7 +575,7 @@ def filter_qualifiers(s: Sentence, label: str) -> Sentence:
     s = s.copy(deep=True)
     mentions = []
     for q in s.qualifierMentions:
-        _, _, _, qualifier, value = q.as_texts(s.tokens, s.relationMentions)
+        _, _, _, qualifier, value = q.as_texts(s.tokens, s.relations)
         if classify_qualifier(qualifier, value) == label:
             mentions.append(q)
     s.qualifierMentions = mentions
@@ -743,13 +741,13 @@ def test_unique_facts(folder: str = "data/q10"):
         for s in sents:
             lengths.append(len(s.tokens))
             for q in s.qualifierMentions:
-                f = q.as_texts(s.tokens, s.relationMentions)
+                f = q.as_texts(s.tokens, s.relations)
                 facts.append(f)
                 entities.append(f[0])
                 entities.append(f[2])
                 entities.append(f[4])
-            for e in s.entityMentions:
-                start, end = e.offset
+            for e in s.entities:
+                start, end = e.span
                 assert start < end
                 ent_lengths.append(end - start)
 
@@ -763,7 +761,7 @@ def test_unique_facts(folder: str = "data/q10"):
 
 
 def sent_to_tuples(s: Sentence) -> Set[Tuple[str, str, str, str, str]]:
-    return set(tup for r in s.relationMentions for tup in r.as_tuples(s.tokens))
+    return set(tup for r in s.relations for tup in r.as_tuples(s.tokens))
 
 
 def test_cases(
@@ -786,7 +784,7 @@ def test_cases(
         gen = sent_to_tuples(sents_gen[i])
         if gold == cube and pipe == set() and gold != gen and pipe != gen:
             info = dict(
-                text=s.sentText,
+                text=s.text,
                 gold=str(gold),
                 cube=str(cube),
                 pipe=str(pipe),
@@ -874,21 +872,17 @@ def test_decoding(
 def test_preds(path_pred: str, path_gold: str):
     sents_pred = Data.load(path_pred).sents
     sents_gold = Data.load(path_gold).sents
-    text_to_gold = {s.sentText: s for s in sents_gold}
+    text_to_gold = {s.text: s for s in sents_gold}
     limit = 10
 
     count = 0
     for s in sents_pred:
-        s2 = text_to_gold[s.sentText]
-        lst = [
-            q.as_texts(s.tokens, s.relationMentions)[:3] for q in s.qualifierMentions
-        ]
-        gold = [
-            q.as_texts(s2.tokens, s2.relationMentions)[:3] for q in s2.qualifierMentions
-        ]
+        s2 = text_to_gold[s.text]
+        lst = [q.as_texts(s.tokens, s.relations)[:3] for q in s.qualifierMentions]
+        gold = [q.as_texts(s2.tokens, s2.relations)[:3] for q in s2.qualifierMentions]
 
         if sorted(lst) != sorted(gold):
-            print(s.sentText)
+            print(s.text)
             print(dict(gold=gold))
             print(dict(pred=lst))
             print()
@@ -897,8 +891,8 @@ def test_preds(path_pred: str, path_gold: str):
                 break
 
     info = dict(
-        pred_labels=Counter(r.label for s in sents_pred for r in s.relationMentions),
-        gold_labels=Counter(r.label for s in sents_gold for r in s.relationMentions),
+        pred_labels=Counter(r.label for s in sents_pred for r in s.relations),
+        gold_labels=Counter(r.label for s in sents_gold for r in s.relations),
         pred_tuples=sum(len(s.qualifierMentions) for s in sents_pred),
         gold_tuples=sum(len(s.qualifierMentions) for s in sents_gold),
     )
@@ -931,8 +925,8 @@ def test_tokenizers(name: str = "bert-base-uncased", path: str = "data/q10"):
     tok2 = AutoTokenizer.from_pretrained(name)
     sents = Data.load(path).sents
     for s in sents:
-        x1 = tok1(s.sentText)
-        x2 = tok2(s.sentText)
+        x1 = tok1(s.text)
+        x2 = tok2(s.text)
         assert x1 == x2
 
 

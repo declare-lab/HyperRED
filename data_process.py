@@ -33,11 +33,11 @@ def load_quintuplets(path: str) -> List[FlatQuintuplet]:
 
 
 class Entity(BaseModel):
-    offset: Span  # Token spans, start inclusive, end exclusive
+    span: Span  # Token spans, start inclusive, end exclusive
     label: str
 
     def as_tuple(self) -> Tuple[int, int, str]:
-        return self.offset[0], self.offset[1], self.label
+        return self.span[0], self.span[1], self.label
 
 
 class Relation(BaseModel):
@@ -63,7 +63,7 @@ class Relation(BaseModel):
         head = " ".join(tokens[slice(*self.head)])
         tail = " ".join(tokens[slice(*self.tail)])
         for q in self.qualifiers:
-            value = " ".join(tokens[slice(*q.offset)])
+            value = " ".join(tokens[slice(*q.span)])
             tuples.append((head, self.label, tail, q.label, value))
         return tuples
 
@@ -104,9 +104,9 @@ class SparseCube(BaseModel):
 
 
 class Sentence(BaseModel):
-    sentText: str
-    entityMentions: List[Entity]
-    relationMentions: List[Relation]
+    text: str
+    entities: List[Entity]
+    relations: List[Relation]
     wordpieceSentText: Optional[str]
     wordpieceTokensIndex: Optional[List[Span]]
     wordpieceSegmentIds: Optional[List[int]]
@@ -115,8 +115,8 @@ class Sentence(BaseModel):
 
     def check_span_overlap(self) -> bool:
         entity_pos = [0 for _ in range(9999)]
-        for e in self.entityMentions:
-            st, ed = e.offset
+        for e in self.entities:
+            st, ed = e.span
             for i in range(st, ed):
                 if entity_pos[i] != 0:
                     return True
@@ -125,22 +125,22 @@ class Sentence(BaseModel):
 
     @property
     def tokens(self) -> List[str]:
-        return self.sentText.split(" ")
+        return self.text.split(" ")
 
     def merge(self, other):
         if other is None:
             return
 
         assert isinstance(other, Sentence)
-        assert other.sentText == self.sentText
+        assert other.text == self.text
 
-        ents = {e.json(): e for e in self.entityMentions}
-        for e in other.entityMentions:
+        ents = {e.json(): e for e in self.entities}
+        for e in other.entities:
             ents[e.json()] = e
-        self.entityMentions = list(ents.values())
+        self.entities = list(ents.values())
 
-        relations = {(r.head, r.tail, r.label): r for r in self.relationMentions}
-        for r in other.relationMentions:
+        relations = {(r.head, r.tail, r.label): r for r in self.relations}
+        for r in other.relations:
             key = (r.head, r.tail, r.label)
             if key not in relations.keys():
                 relations[key] = r
@@ -148,7 +148,7 @@ class Sentence(BaseModel):
                 relations[key].merge(r)
             assert relations[key] is not None
 
-        self.relationMentions = list(relations.values())
+        self.relations = list(relations.values())
 
 
 class Data(BaseModel):
@@ -173,15 +173,15 @@ class Data(BaseModel):
     def to_flat_quintuplets(self) -> List[FlatQuintuplet]:
         outputs = []
         for s in tqdm(self.sents, desc="to_flat_quintuplets"):
-            for r in s.relationMentions:
+            for r in s.relations:
                 for q in r.qualifiers:
                     flat = FlatQuintuplet(
-                        tokens=s.sentText.split(),
+                        tokens=s.text.split(),
                         head=r.head,
                         tail=r.tail,
                         relation=r.label,
                         qualifier=q.label,
-                        value=q.offset,
+                        value=q.span,
                     )
                     outputs.append(flat)
         return outputs
@@ -193,21 +193,18 @@ class Data(BaseModel):
 
         for q in tqdm(quintuplets, desc="load_from_flat_quintuplets"):
             ents = [
-                Entity(offset=span, label="Entity")
-                for span in [q.head, q.tail, q.value]
+                Entity(span=span, label="Entity") for span in [q.head, q.tail, q.value]
             ]
             relation = Relation(
                 head=q.head,
                 tail=q.tail,
                 label=q.relation,
-                qualifiers=[Entity(offset=q.value, label=q.qualifier)],
+                qualifiers=[Entity(span=q.value, label=q.qualifier)],
             )
-            sent = Sentence(
-                sentText=q.text, entityMentions=ents, relationMentions=[relation]
-            )
-            sent.merge(mapping.get(sent.sentText))
+            sent = Sentence(text=q.text, entities=ents, relations=[relation])
+            sent.merge(mapping.get(sent.text))
             assert sent is not None
-            mapping[sent.sentText] = sent
+            mapping[sent.text] = sent
 
         data = cls(sents=list(mapping.values()))
         old = set(flat.json() for flat in quintuplets)
@@ -219,7 +216,7 @@ class Data(BaseModel):
         relation_labels = []
         qualifier_labels = []
         for s in self.sents:
-            for r in s.relationMentions:
+            for r in s.relations:
                 relation_labels.append(r.label)
                 for q in r.qualifiers:
                     qualifier_labels.append(q.label)
@@ -275,7 +272,7 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
 
         span_to_ent = {}
         for span, label in self.all_ent_preds.items():
-            e = Entity(offset=span, label=label)
+            e = Entity(span=span, label=label)
             span_to_ent[span] = e
 
         pair_to_relation = {}
@@ -284,13 +281,13 @@ class RawPred(BaseModel, extra=Extra.forbid, arbitrary_types_allowed=True):
             pair_to_relation[(head, tail)] = r
 
         for (head, tail, value), label in self.all_q_preds.items():
-            q = Entity(offset=value, label=label)
+            q = Entity(span=value, label=label)
             pair_to_relation[(head, tail)].qualifiers.append(q)
 
         return Sentence(
-            sentText=text,
-            entityMentions=list(span_to_ent.values()),
-            relationMentions=list(pair_to_relation.values()),
+            text=text,
+            entities=list(span_to_ent.values()),
+            relations=list(pair_to_relation.values()),
         )
 
 
@@ -307,7 +304,7 @@ def add_tokens(sent, tokenizer):
 
     wordpiece_tokens_index = []
     cur_index = len(wordpiece_tokens)
-    for token in sent["sentText"].split(" "):
+    for token in sent["text"].split(" "):
         if is_roberta:
             token = " " + token  # RoBERTa is space-sensitive
         tokenized_token = list(tokenizer.tokenize(token))
@@ -332,21 +329,21 @@ def add_joint_label(sent, label_vocab):
 
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["None"]
-    seq_len = len(sent["sentText"].split(" "))
+    seq_len = len(sent["text"].split(" "))
     label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
-    for ent in sent["entityMentions"]:
-        for i in range(ent["offset"][0], ent["offset"][1]):
-            for j in range(ent["offset"][0], ent["offset"][1]):
+    for ent in sent["entities"]:
+        for i in range(ent["span"][0], ent["span"][1]):
+            for j in range(ent["span"][0], ent["span"][1]):
                 label_matrix[i][j] = ent_rel_id[ent["label"]]
 
     entries: List[Tuple[int, int, int, int]] = []
-    for rel in sent["relationMentions"]:
+    for rel in sent["relations"]:
         for i in range(rel["head"][0], rel["head"][1]):
             for j in range(rel["tail"][0], rel["tail"][1]):
                 label_matrix[i][j] = ent_rel_id[rel["label"]]
                 for q in rel["qualifiers"]:
-                    for k in range(q["offset"][0], q["offset"][1]):
+                    for k in range(q["span"][0], q["span"][1]):
                         entries.append((i, j, k, ent_rel_id[q["label"]]))
 
     sent["jointLabelMatrix"] = label_matrix
@@ -359,10 +356,10 @@ def add_joint_label(sent, label_vocab):
 def add_tag_joint_label(sent, label_vocab):
     ent_rel_id = label_vocab["id"]
     none_id = ent_rel_id["O"]
-    seq_len = len(sent["sentText"].split(" "))
+    seq_len = len(sent["text"].split(" "))
     label_matrix = [[none_id for _ in range(seq_len)] for _ in range(seq_len)]
 
-    spans = [Entity(**e).as_tuple() for e in sent["entityMentions"]]
+    spans = [Entity(**e).as_tuple() for e in sent["entities"]]
     encoder = BioEncoder()
     tags = encoder.run(spans, seq_len)
     if not sorted(encoder.decode(tags)) == sorted(spans):
@@ -416,9 +413,9 @@ def make_label_file(pattern_in: str, path_out: str):
         with open(path) as f:
             sents.extend([Sentence(**json.loads(line)) for line in tqdm(f)])
 
-    relations = sorted(set(r.label for s in sents for r in s.relationMentions))
+    relations = sorted(set(r.label for s in sents for r in s.relations))
     qualifiers = sorted(
-        set(q.label for s in sents for r in s.relationMentions for q in r.qualifiers)
+        set(q.label for s in sents for r in s.relations for q in r.qualifiers)
     )
     labels = ["None", "Entity"] + qualifiers + sorted(set(relations) - set(qualifiers))
     label_map = {name: i for i, name in enumerate(labels)}
@@ -445,7 +442,7 @@ def make_tag_label_file(pattern_in: str, path_out: str):
         with open(path) as f:
             for line in tqdm(f):
                 s = Sentence(**json.loads(line))
-                for q in [q for r in s.relationMentions for q in r.qualifiers]:
+                for q in [q for r in s.relations for q in r.qualifiers]:
                     tags.append("B-" + q.label)
                     tags.append("I-" + q.label)
                     qualifiers.append(q.label)  # Dataset reader needs it
@@ -465,16 +462,16 @@ def make_tag_label_file(pattern_in: str, path_out: str):
 
 def convert_sent_to_tags(sent: Sentence) -> List[Sentence]:
     outputs = []
-    for r in sent.relationMentions:
+    for r in sent.relations:
         head = " ".join(sent.tokens[slice(*r.head)])
         tail = " ".join(sent.tokens[slice(*r.tail)])
-        parts = [sent.sentText, head, r.label, tail]
+        parts = [sent.text, head, r.label, tail]
         text = " | ".join(parts)
 
         new = sent.copy(deep=True)
-        new.sentText = text
-        new.entityMentions = r.qualifiers
-        new.relationMentions = []
+        new.text = text
+        new.entities = r.qualifiers
+        new.relations = []
         outputs.append(new)
 
     return outputs

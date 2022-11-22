@@ -22,25 +22,25 @@ def merge_pipeline_preds(
         sents = [Sentence(**json.loads(line)) for line in f]
     with open(path_tags) as f:
         s_tags = [Sentence(**json.loads(line)) for line in f]
-    text_to_i = {s.sentText: i for i, s in enumerate(sents)}
+    text_to_i = {s.text: i for i, s in enumerate(sents)}
     assert all(sep not in text for text in text_to_i.keys())
 
     for s in s_tags:
-        text, head, relation, tail = s.sentText.split(sep)
+        text, head, relation, tail = s.text.split(sep)
         if text in text_to_i.keys():
             i = text_to_i[text]
-            relations = sents[i].relationMentions
-            spans = set(e.offset for e in sents[i].entityMentions)
+            relations = sents[i].relations
+            spans = set(e.span for e in sents[i].entities)
 
             for r in relations:
                 r_head = " ".join(s.tokens[slice(*r.head)])
                 r_tail = " ".join(s.tokens[slice(*r.tail)])
                 if (r_head, r_tail, r.label) == (head, tail, relation):
-                    for e in s.entityMentions:
+                    for e in s.entities:
                         r.qualifiers.append(e)
-                        if e.offset not in spans:
-                            spans.add(e.offset)
-                            sents[i].entityMentions.append(e)
+                        if e.span not in spans:
+                            spans.add(e.span)
+                            sents[i].entities.append(e)
         else:
             print(dict(unmatched=text))
 
