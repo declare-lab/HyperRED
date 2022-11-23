@@ -1,10 +1,9 @@
 ## A Dataset for Hyper-Relational Extraction and a Cube-Filling Approach
 
-[//]: # ([![PWC]&#40;https://img.shields.io/badge/PapersWithCode-Benchmark-%232cafb1&#41;]&#40;https://paperswithcode.com/paper/relationprompt-leveraging-prompts-to-generate&#41;)
-
-[//]: # ([![Colab]&#40;https://img.shields.io/badge/Colab-Code%20Demo-%23fe9f00&#41;]&#40;https://colab.research.google.com/drive/18lrKD30kxEUolQ61o5nzUJM0rvWgpbFK?usp=sharing&#41;)
-
-[//]: # ([![Jupyter]&#40;https://img.shields.io/badge/Jupyter-Notebook%20Demo-important&#41;]&#40;https://github.com/declare-lab/RelationPrompt/blob/main/demo.ipynb&#41;)
+[![HD](https://img.shields.io/badge/HuggingFace-Datasets-blue)](https://huggingface.co/datasets/declare-lab/HyperRED)
+[![PWC](https://img.shields.io/badge/PapersWithCode-Benchmark-%232cafb1)](https://paperswithcode.com/sota/hyper-relational-extraction-on-hyperred)
+[![Colab](https://img.shields.io/badge/Colab-Code%20Demo-%23fe9f00)](https://colab.research.google.com/drive/1R3nDZ278vUlPrjfJPoTB7fFA1JFN8h5-?usp=sharing)
+[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook%20Demo-important)](https://github.com/declare-lab/HyperRED/blob/main/demo.ipynb)
 
 This repository implements our [EMNLP 2022 research paper](https://arxiv.org/abs/2211.10018).
 
