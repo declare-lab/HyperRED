@@ -1,5 +1,5 @@
+import hashlib
 import json
-from datasets import load_dataset
 import pickle
 import shutil
 from pathlib import Path
@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple, Optional
 
 import fire
 import numpy as np
+from datasets import load_dataset
 from pydantic import BaseModel
 from pydantic.main import Extra
 from tqdm import tqdm
@@ -224,6 +225,7 @@ class Data(BaseModel):
             relation_labels=len(set(relation_labels)),
             qualifiers=len(qualifier_labels),
             qualifier_labels=len(set(qualifier_labels)),
+            hash=hashlib.md5(self.json().encode()).hexdigest(),
         )
         print(json.dumps(info, indent=2))
 
@@ -556,9 +558,19 @@ def test_bio():
 
 
 def test_data(path: str):
-    data = Data.load_from_flat_quintuplets(path)
+    data = Data.load(path)
     data.analyze()
-    print(dict(tokens=data.sents[0].tokens))
+
+    for s in data.sents[:3]:
+        print(f"\nText: {s.text}")
+        print(f"Tokens: {s.tokens}")
+        for r in s.relations:
+            fn = lambda span: " ".join(s.tokens[span[0] : span[1]])
+            print(f"\tRelation: {r}")
+            print(f"\tHead: {fn(r.head)}, Relation: {r.label}, Tail: {fn(r.tail)}")
+            for q in r.qualifiers:
+                print(f"\t\tQualifier: {q.label}, Value: {fn(q.span)}")
+        print()
 
 
 def convert_flat(path_in: str, path_out: str):
