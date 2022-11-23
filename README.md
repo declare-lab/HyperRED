@@ -8,6 +8,8 @@
 
 This repository implements our [EMNLP 2022 research paper](https://arxiv.org/abs/2211.10018).
 
+![diagram](https://github.com/declare-lab/HyperRED/releases/download/v1.0.0/data.png)
+
 HyperRED is a dataset for the new task of hyper-relational extraction, which extracts relation triplets together with
 qualifier information such as time, quantity or location.
 For example, the relation triplet (Leonard Parker, Educated At, Harvard University) can be factually enriched by
@@ -15,8 +17,6 @@ including the qualifier (End Time, 1967).
 HyperRED contains 44k sentences with 62 relation types and 44 qualifier types.
 Inspired by table-filling approaches for relation extraction, we propose CubeRE, a cube-filling model which explicitly
 considers the interaction between relation triplets and qualifiers.
-
-[//]: # (![diagram]&#40;https://github.com/declare-lab/RelationPrompt/releases/download/v1.0.0/diagram.png&#41;)
 
 ### Setup
 
