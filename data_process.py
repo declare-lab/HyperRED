@@ -1,4 +1,5 @@
 import json
+from datasets import load_dataset
 import pickle
 import shutil
 from pathlib import Path
@@ -507,6 +508,7 @@ def process_many(
         process(
             str(path), str(Path(dir_out) / path.name), path_label, mode=mode, **kwargs
         )
+    shutil.rmtree(dir_temp)
 
 
 class BioEncoder:
@@ -565,11 +567,21 @@ def convert_flat(path_in: str, path_out: str):
     data.save(path_out)
 
 
+def download_data(folder_out: str, name: str = "declare-lab/HyperRED"):
+    dataset = load_dataset(name)
+    for key, name in dict(train="train", validation="dev", test="test").items():
+        data = Data(sents=[Sentence(**raw) for raw in dataset[key]])
+        path_out = Path(folder_out, name).with_suffix(".json")
+        data.save(str(path_out))
+        print(dict(path_out=path_out))
+
+
 """
 p data_process.py convert_flat data/flat_min_10/dev.json data/hyperred/dev.json
 p data_process.py convert_flat data/flat_min_10/test.json data/hyperred/test.json
 p data_process.py convert_flat data/flat_min_10/train.json data/hyperred/train.json
 
+p data_process.py download_data data/hyperred/
 p data_process.py process_many data/hyperred/ data/processed/
 p data_process.py process_many data/hyperred/ data/processed_tags/ --mode tags
 
