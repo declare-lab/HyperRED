@@ -425,13 +425,10 @@ BERT-Large
 
 p training.py \
 --bert_model_name bert-large-uncased \
---save_dir ckpt/pair2_no_value_prune_20_large_seed_0 \
+--save_dir ckpt/cube_prune_20_large_seed_0 \
 --seed 0 \
 --data_dir data/processed \
---no_value_mlp \
 --prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
 --config_file config.yml
 
 ################################################################################
@@ -439,13 +436,18 @@ p training.py \
 BERT-Base
 
 p training.py \
---save_dir ckpt/pair2_no_value_prune_20_seed_0 \
+--save_dir ckpt/cube_prune_20_seed_0 \
 --seed 0 \
 --data_dir data/processed \
---no_value_mlp \
 --prune_topk 20 \
---use_pair2_mlp \
---fix_q_loss \
+--config_file config.yml
+
+p training.py \
+--epochs 2 \
+--save_dir ckpt/cube_prune_20_seed_0_epochs_2_copy \
+--seed 0 \
+--data_dir data/processed \
+--prune_topk 20 \
 --config_file config.yml
 
 ################################################################################

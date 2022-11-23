@@ -197,76 +197,6 @@ class EntRelJointDecoder(nn.Module):
         )
         return results
 
-    def hard_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
-        """hard_joint_decoding extracts entity and relaition at the same time,
-        and consider the interconnection of entity and relation.
-
-        Args:
-            batch_normalized_joint_score (tensor): batch joint pred
-            batch_seq_tokens_lens (list): batch sequence length
-
-        Returns:
-            tuple: predicted entity and relation
-        """
-
-        separate_position_preds = []
-        ent_preds = []
-        rel_preds = []
-
-        joint_label_n = self.vocab.get_vocab_size("ent_rel_id")
-        batch_joint_pred = (
-            torch.argmax(batch_normalized_joint_score, dim=-1).cpu().numpy()
-        )
-        ent_label = np.append(self.ent_label.cpu().numpy(), self.none_idx)
-        rel_label = np.append(self.rel_label.cpu().numpy(), self.none_idx)
-
-        for idx, seq_len in enumerate(batch_seq_tokens_lens):
-            separate_position_preds.append([])
-            ent_pred = {}
-            rel_pred = {}
-            ents = []
-            joint_pred = batch_joint_pred[idx]
-            ent_pos = [0] * seq_len
-            for l in range(self.max_span_length, 0, -1):
-                for st in range(0, seq_len - l + 1):
-                    pred_cnt = np.array([0] * joint_label_n)
-                    if any(ent_pos[st : st + l]):
-                        continue
-                    for i in range(st, st + l):
-                        for j in range(st, st + l):
-                            pred_cnt[joint_pred[i][j]] += 1
-                    pred = int(ent_label[np.argmax(pred_cnt[ent_label])])
-                    pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-
-                    if pred_label == "None":
-                        continue
-
-                    ents.append((st, st + l))
-                    for i in range(st, st + l):
-                        ent_pos[i] = 1
-                    ent_pred[(st, st + l)] = pred_label
-
-            for idx1 in range(len(ents)):
-                for idx2 in range(len(ents)):
-                    if idx1 == idx2:
-                        continue
-                    pred_cnt = np.array([0] * joint_label_n)
-                    for i in range(ents[idx1][0], ents[idx1][1]):
-                        for j in range(ents[idx2][0], ents[idx2][1]):
-                            pred_cnt[joint_pred[i][j]] += 1
-                    pred = int(rel_label[np.argmax(pred_cnt[rel_label])])
-                    pred_label = self.vocab.get_token_from_index(pred, "ent_rel_id")
-                    # h = ents[idx1][1] - ents[idx1][0]
-                    # w = ents[idx2][1] - ents[idx2][0]
-                    if pred_label == "None":
-                        continue
-                    rel_pred[(ents[idx1], ents[idx2])] = pred_label
-
-            ent_preds.append(ent_pred)
-            rel_preds.append(rel_pred)
-
-        return separate_position_preds, ent_preds, rel_preds
-
     def soft_joint_decoding(self, batch_normalized_joint_score, batch_seq_tokens_lens):
         """soft_joint_decoding extracts entity and relation at the same time,
         and consider the interconnection of entity and relation.
@@ -627,21 +557,12 @@ class CubeRE(nn.Module):
             dropout=cfg.dropout,
         )
 
-        if self.get_config("use_pair2_mlp"):
-            self.pair2_mlp = BertLinear(
-                input_size=self.encoder_output_size * 2,
-                output_size=cfg.mlp_hidden_size,
-                activation=self.activation,
-                dropout=cfg.dropout,
-            )
-
-        if self.get_config("use_entity_loss"):
-            self.entity_mlp = BertLinear(
-                input_size=self.embedding_model.get_hidden_size(),
-                output_size=ent_rel_file["q_num_logits"],
-                activation=nn.Identity(),
-                dropout=0.0,
-            )
+        self.pair2_mlp = BertLinear(
+            input_size=self.encoder_output_size * 2,
+            output_size=cfg.mlp_hidden_size,
+            activation=self.activation,
+            dropout=cfg.dropout,
+        )
 
         self.final_mlp = BertLinear(
             input_size=cfg.mlp_hidden_size,
@@ -650,42 +571,14 @@ class CubeRE(nn.Module):
             dropout=0.0,
         )
 
-        self.value_mlp = BertLinear(
-            input_size=self.encoder_output_size,
-            output_size=cfg.mlp_hidden_size,
-            activation=self.activation,
-            dropout=cfg.dropout,
-        )
-
         self.U = nn.parameter.Parameter(
             torch.FloatTensor(
                 ent_rel_file["q_num_logits"],
                 cfg.mlp_hidden_size,
-                cfg.mlp_hidden_size,
+                self.encoder_output_size,
             )
         )
         self.U.data.zero_()
-
-        if self.get_config("no_value_mlp"):
-            self.value_mlp = nn.Identity()
-            self.U = nn.parameter.Parameter(
-                torch.FloatTensor(
-                    ent_rel_file["q_num_logits"],
-                    cfg.mlp_hidden_size,
-                    self.encoder_output_size,
-                )
-            )
-            self.U.data.zero_()
-
-        if self.get_config("use_triplet_biaffine"):
-            self.X = nn.parameter.Parameter(
-                torch.FloatTensor(
-                    self.vocab.get_vocab_size("ent_rel_id"),
-                    cfg.mlp_hidden_size,
-                    cfg.mlp_hidden_size,
-                )
-            )
-            self.X.data.zero_()
 
         if cfg.logit_dropout > 0:
             self.logit_dropout = nn.Dropout(p=cfg.logit_dropout)
@@ -726,17 +619,9 @@ class CubeRE(nn.Module):
         pair = torch.cat([head, tail], dim=-1)
         pair = self.pair_mlp(pair)
         batch_joint_score = self.final_mlp(pair)
-        if self.get_config("use_triplet_biaffine"):
-            del batch_joint_score
-            triplet_head = self.head_mlp(batch_seq_tokens_encoder_repr)
-            triplet_tail = self.tail_mlp(batch_seq_tokens_encoder_repr)
-            batch_joint_score = torch.einsum(
-                "bxi, oij, byj -> bxyo", triplet_head, self.X, triplet_tail
-            )
 
         if self.prune_topk > 0:
             topk = min(seq_len, self.prune_topk)
-            assert self.get_config("use_pair2_mlp")
             seq_mask = batch_inputs["joint_label_matrix_mask"].diagonal(dim1=1, dim2=2)
             seq_score = batch_joint_score.diagonal(dim1=1, dim2=2).permute(0, 2, 1)
             seq_score = seq_score[:, :, list(self.ent_label)].max(dim=-1).values
@@ -754,24 +639,19 @@ class CubeRE(nn.Module):
         else:
             indices = None
 
-        if self.get_config("use_pair2_mlp"):
-            # Don't share representations with table/triplets
-            pair = self.pair2_mlp(torch.cat([head, tail], dim=-1))
+        # Don't share representations with table/triplets
+        pair = self.pair2_mlp(torch.cat([head, tail], dim=-1))
 
-        value = self.value_mlp(batch_seq_tokens_encoder_repr)
+        value = batch_seq_tokens_encoder_repr
         q_score = torch.einsum("bxyi, oij, bzj -> bxyzo", pair, self.U, value)
         mask = batch_inputs["quintuplet_matrix_mask"]
         assert q_score.shape[:-1] == mask.shape
-        q_loss = self.quintuplet_loss(
-            q_score.softmax(-1)[mask], batch_inputs["quintuplet_matrix"][mask]
-        )
 
-        if self.get_config("fix_q_loss"):
-            # Don't softmax before crossentropy and add logit dropout
-            q_loss = self.quintuplet_loss(
-                self.logit_dropout(q_score[mask]),
-                batch_inputs["quintuplet_matrix"][mask],
-            )
+        # Don't softmax before crossentropy and add logit dropout
+        q_loss = self.quintuplet_loss(
+            self.logit_dropout(q_score[mask]),
+            batch_inputs["quintuplet_matrix"][mask],
+        )
 
         results = {}
         if not self.training:
@@ -808,18 +688,6 @@ class CubeRE(nn.Module):
         results["loss"] = results["element_loss"] + results["q_loss"]
         results["joint_score"] = batch_joint_score
         results["q_score"] = q_score
-
-        if self.get_config("use_entity_loss"):
-            entity_score = self.entity_mlp(batch_seq_tokens_encoder_repr)
-            entity_mask = batch_inputs["joint_label_matrix_mask"].diagonal(
-                dim1=1, dim2=2
-            )
-            entity_labels = batch_inputs["joint_label_matrix"].diagonal(dim1=1, dim2=2)
-            results["entity_loss"] = self.element_loss(
-                self.logit_dropout(entity_score[entity_mask]),
-                entity_labels[entity_mask],
-            )
-            results["loss"] += results["entity_loss"]
 
         return results
 

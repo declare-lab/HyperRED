@@ -94,7 +94,7 @@ def run_predict(
         "Leonard Parker received his PhD from Harvard University in 1967 .",
         "Szewczyk played 37 times for Poland, scoring 3 goals .",
     ),
-    path_checkpoint: str = "ckpt/pair2_no_value_prune_20_seed_0",
+    path_checkpoint: str = "ckpt/cube_prune_20_seed_0",
     task: str = "quintuplet",
     path_temp: str = "temp.json",
     data_split: str = "pred",
@@ -153,7 +153,7 @@ p prediction.py eval_pipeline \
 ################################################################################
 Triplet Scores
 
-p prediction.py score_preds ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
+p prediction.py score_preds ckpt/q10_cube_prune_20_seed_0/test.json data/q10/test.json
 "precision": 0.7252410166520596,
 "recall": 0.6974294142435735,  
 "f1": 0.7110633727175081
@@ -172,8 +172,8 @@ p prediction.py score_preds data/q10/gen_pred.json data/q10/test.json
 Model speed comparison
 
 p prediction.py run_eval \
-ckpt/q10_pair2_no_value_prune_20_seed_0/best_model \
-ckpt/q10_pair2_no_value_prune_20_seed_0/dataset.pickle \
+ckpt/q10_cube_prune_20_seed_0/best_model \
+ckpt/q10_cube_prune_20_seed_0/dataset.pickle \
 test
 
 Cube: 25s for 4k samples, 6.6GB
@@ -206,7 +206,7 @@ p prediction.py eval_pipeline \
 --data_split test
 
 p prediction.py score_preds \
-ckpt/q10_pair2_no_value_prune_20_seed_0/test.json \
+ckpt/q10_cube_prune_20_seed_0/test.json \
 data/q10/test.json
 
 p prediction.py score_preds data/q10/gen_pred.json data/q10/test.json

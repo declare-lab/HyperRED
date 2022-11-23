@@ -327,9 +327,7 @@ def test_decode_nonzero_cuboids(path: str = "data/q10/dev.json"):
             print()
 
 
-def test_roberta(
-    path: str = "ckpt/q10r_fix_q_loss/dataset.pickle", name: str = "roberta-base"
-):
+def test_roberta(path: str = "ckpt/q10r/dataset.pickle", name: str = "roberta-base"):
     device = torch.device("cpu")
     # device = torch.device("cuda")
     ds = Dataset.load(path)
@@ -498,7 +496,7 @@ def test_biaffine():
 
 
 def test_ign_score(
-    path_pred: str = "ckpt/q10_pair2_fix_q_loss_prune_20/test.json",
+    path_pred: str = "ckpt/q10_cube_prune_20/test.json",
     path_gold: str = "data/q10/test.json",
     path_train: str = "data/q10/train.json",
 ):
@@ -765,7 +763,7 @@ def sent_to_tuples(s: Sentence) -> Set[Tuple[str, str, str, str, str]]:
 
 
 def test_cases(
-    path_cube: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/test.json",
+    path_cube: str = "ckpt/q10_cube_prune_20_seed_0/test.json",
     path_pipe: str = "ckpt/q10_tags_distilbert_seed_0/pred.json",
     path_gen: str = "data/q10/gen_pred.json",
     path_gold: str = "data/q10/test.json",
@@ -822,8 +820,8 @@ def test_cases(
 
 
 def test_decoding(
-    path: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/best_model",
-    path_data: str = "ckpt/q10_pair2_no_value_prune_20_seed_0/dataset.pickle",
+    path: str = "ckpt/q10_cube_prune_20_seed_0/best_model",
+    path_data: str = "ckpt/q10_cube_prune_20_seed_0/dataset.pickle",
     path_gold: str = "data/q10/test.json",
     data_split: str = "test",
     task: str = "quintuplet",
@@ -944,7 +942,7 @@ Findings
 Tasks
 - position embeddings
 
-p analysis.py test_separate_eval ckpt/q10_pair2_no_value_prune_20_seed_0/test.json data/q10/test.json
+p analysis.py test_separate_eval ckpt/q10_cube_prune_20_seed_0/test.json data/q10/test.json
 {'label': 'time', 'score': 0.623048033208144}    
 {'label': 'number', 'score': 0.7924528301886793}
 {'label': 'role', 'score': 0.523168908819133}

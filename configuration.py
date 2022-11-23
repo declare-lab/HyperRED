@@ -182,39 +182,6 @@ class ConfigurationParer:
         # embedding configurations
         group = self.parser.add_argument_group("Embedding")
         group.add(
-            "--no_value_mlp",
-            "--no_value_mlp",
-            action="store_true",
-            help="no_value_mlp",
-        )
-        group.add(
-            "--use_triplet_biaffine",
-            "--use_triplet_biaffine",
-            action="store_true",
-            help="use_triplet_biaffine",
-        )
-        group.add(
-            "-task_2",
-            "--task_2",
-            type=str,
-            default="",
-            help="task_2",
-        )
-        group.add(
-            "-save_dir_2",
-            "--save_dir_2",
-            type=str,
-            default="",
-            help="save_dir_2",
-        )
-        group.add(
-            "-data_dir_2",
-            "--data_dir_2",
-            type=str,
-            default="",
-            help="data_dir_2",
-        )
-        group.add(
             "--freeze_bert",
             "--freeze_bert",
             action="store_true",
@@ -233,24 +200,6 @@ class ConfigurationParer:
             type=int,
             default=0,
             help="prune_topk",
-        )
-        group.add(
-            "--use_entity_loss",
-            "--use_entity_loss",
-            action="store_true",
-            help="use_entity_loss",
-        )
-        group.add(
-            "--fix_q_loss",
-            "--fix_q_loss",
-            action="store_true",
-            help="fix_q_loss",
-        )
-        group.add(
-            "--use_pair2_mlp",
-            "--use_pair2_mlp",
-            action="store_true",
-            help="use_pair2_mlp",
         )
         group.add(
             "-task",
