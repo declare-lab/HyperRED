@@ -3,11 +3,15 @@ import os
 from pathlib import Path
 from typing import List
 
+import torch
 from fire import Fire
+from tqdm import tqdm
+from transformers import AutoTokenizer
 
-from data_process import Sentence, process, Data
+from data_process import Sentence, process, Data, RawPred, add_tokens, add_joint_label
+from data_reader import Dataset, DataReader, Instance
 from scoring import EntityScorer, QuintupletScorer, StrictScorer
-from training import run_eval, score_preds
+from training import run_eval, score_preds, load_model, prepare_inputs, process_outputs
 
 assert run_eval is not None
 assert score_preds is not None
@@ -83,6 +87,54 @@ def eval_pipeline(
     for scorer in [EntityScorer(), StrictScorer(), QuintupletScorer()]:
         results[scorer.name] = scorer.run(preds, sents)
     print(json.dumps(results, indent=2))
+
+
+def run_predict(
+    texts: List[str] = (
+        "Leonard Parker received his PhD from Harvard University in 1967 .",
+        "Szewczyk played 37 times for Poland, scoring 3 goals .",
+    ),
+    path_checkpoint: str = "ckpt/pair2_no_value_prune_20_seed_0",
+    task: str = "quintuplet",
+    path_temp: str = "temp.json",
+    data_split: str = "pred",
+) -> Data:
+    model = load_model(task, str(Path(path_checkpoint, "best_model")))
+    dataset = Dataset.load(str(Path(path_checkpoint, "dataset.pickle")))
+    cfg = model.cfg
+    model.zero_grad()
+    tok = AutoTokenizer.from_pretrained(cfg.bert_model_name)
+
+    inputs = []
+    for t in texts:
+        raw = Sentence(tokens=t.split(), entities=[], relations=[]).dict()
+        raw = add_tokens(raw, tok)
+        raw = add_joint_label(raw, dict(id={"None": 0}))
+        inputs.append(Sentence(**raw))
+    Data(sents=inputs).save(path_temp)
+
+    max_len = {"tokens": cfg.max_sent_len, "wordpiece_tokens": cfg.max_wordpiece_len}
+    reader = DataReader(path_temp, False, max_len)
+    fields = dataset.instance_dict["test"]["instance"].fields
+    instance = Instance(fields)
+    dataset.add_instance(data_split, instance, reader, is_count=True, is_train=False)
+    dataset.process_instance(data_split)
+
+    all_outputs = []
+    num_batches = dataset.get_dataset_size(data_split) // cfg.test_batch_size
+    for _, batch in tqdm(
+        dataset.get_batch(data_split, cfg.test_batch_size, None), total=num_batches
+    ):
+        model.eval()
+        with torch.no_grad():
+            inputs = prepare_inputs(batch, cfg.device)
+            outputs = model(inputs)
+            all_outputs.extend(process_outputs(inputs, outputs))
+
+    # noinspection Pydantic
+    preds = [RawPred(**r).as_sentence(model.vocab) for r in all_outputs]
+    os.remove(path_temp)
+    return Data(sents=preds)
 
 
 """
