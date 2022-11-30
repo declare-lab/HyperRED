@@ -52,6 +52,39 @@ for s in data.sents[:3]:
             print(q.label, q.span)
 ```
 
+### Data Fields
+
+- **tokens:** Sentence text tokens.
+- **entities:** List of each entity span. The span indices correspond to each token in the space-separated text (
+  inclusive-start and exclusive-end index)
+- **relations:** List of each relationship label between the head and tail entity spans. Each relation contains a list
+  of qualifiers where each qualifier has the value entity span and qualifier label.
+
+### Data Example
+
+An example instance of the dataset is shown below:
+
+```
+{              
+  "tokens": ['Acadia', 'University', 'is', 'a', 'predominantly', 'undergraduate', 'university', 'located', 'in', 'Wolfville', ',', 'Nova', 'Scotia', ',', 'Canada', 'with', 'some', 'graduate', 'programs', 'at', 'the', 'master', "'", 's', 'level', 'and', 'one', 'at', 'the', 'doctoral', 'level', '.'],
+  "entities": [
+    {'span': (0, 2), 'label': 'Entity'},
+    {'span': (9, 13), 'label': 'Entity'},
+    {'span': (14, 15), 'label': 'Entity'},
+  ],
+  "relations": [
+    {
+      "head": [0, 2],
+      "tail": [9, 13],
+      "label": "headquarters location",
+      "qualifiers": [
+        {"span": [14, 15], "label": "country"}
+      ]
+    }
+  ], 
+}
+ ```
+
 ### Model Training
 
 ```
