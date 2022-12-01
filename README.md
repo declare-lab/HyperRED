@@ -108,6 +108,5 @@ following [paper](https://arxiv.org/abs/2211.10018):
     booktitle = "Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing",
     year = "2022",
     url = "https://arxiv.org/abs/2211.10018",
-    doi = "https://arxiv.org/abs/2203.09101",
 }
 ```
