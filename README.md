@@ -96,6 +96,21 @@ python training.py \
 --config_file config.yml
 ```
 
+### Model Prediction
+
+You can download and extract the pre-trained
+weights [here](https://github.com/declare-lab/HyperRED/releases/download/v1.0.0/cube_model.zip)
+
+```
+from prediction import run_predict
+
+texts = [
+    "Leonard Parker received his PhD from Harvard University in 1967 .",
+    "Szewczyk played 37 times for Poland, scoring 3 goals .",
+]
+preds = run_predict(texts, path_checkpoint="cube_model")
+```
+
 ### Research Citation
 
 If the code is useful for your research project, we appreciate if you cite the
