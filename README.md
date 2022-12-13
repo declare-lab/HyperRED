@@ -111,6 +111,21 @@ texts = [
 preds = run_predict(texts, path_checkpoint="cube_model")
 ```
 
+### Evaluation Scoring
+
+```
+from prediction import run_predict, score_preds
+
+path_gold = "data/hyperred/test.json"
+path_pred = "preds.json"
+
+data = Data.load(path_gold)
+texts = [s.text for s in data.sents]
+preds = run_predict(texts, path_checkpoint="cube_model")
+preds.save(path_pred)
+score_preds(path_pred, path_gold)
+```
+
 ### Research Citation
 
 If the code is useful for your research project, we appreciate if you cite the
